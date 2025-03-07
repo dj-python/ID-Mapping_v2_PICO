@@ -15,6 +15,16 @@ class Main:
 
         self.readSensorId()
 
+        self.Slave_IDs = None
+        self.Write_Protections = None
+        self.Sensor_Streaming_Resister_Addresses = None
+        self.Sensor_Streaming_Datas = None
+        self.Sensor_Reading_Resister_Addresses = None
+        self.Sensor_Write_Resister_Addresses = None
+        self.Sensor_Write_Datas = None
+        self.Sensor_Read_Resister_Addresses = None
+        self.EEPROM_Writing_Resister_Addresses = None
+
     def func_1msec(self):
         pass
 
@@ -132,6 +142,37 @@ class Main:
         sensorId += flag1
 
         print(f'Final sensor ID: {sensorId}')
+
+
+    # code by PDJ
+    # 텍스트 파일에서 '0x' 이후의 문자열만 추출하여 각 변수에 저장
+    def extract_info(self, index):
+        if '0x' in self.All_Info_data[index]:
+            start_index = self.All_Info_data[index].index('0x')
+            extracted_value = self.All_Info_data[index][start_index+2:start_index+6]
+            if extracted_value is not None:
+                print(extracted_value)
+                return extracted_value
+            return ''
+
+    # code by PDJ
+    # txt 파일로부터 읽어온 Info 리스트를 각 변수에 할당
+    def read_Sensor_info(self):
+        self.file_open = open('Sensor Info.txt', 'r')
+        self.All_Info_data = self.file_open.readlines()
+        self.file_open.close()
+        print(self.All_Info_data)
+
+        self.Slave_IDs = ''.join(self.extract_info(i) for i in range(4,8))
+        self.Write_Protections = ''.join(self.extract_info(i) for i in range(10, 13))
+        self.Sensor_Streaming_Resister_Addresses = ''.join(self.extract_info(i) for i in range(13, 18))
+        self.Sensor_Streaming_Datas = ''.join(self.extract_info(i) for i in range(19, 24))
+        self.Sensor_Reading_Resister_Addresses = ''.join(self.extract_info(i) for i in range(25, 28))
+        self.Sensor_Write_Resister_Addresses = ''.join(self.extract_info(i) for i in range(29, 34))
+        self.Sensor_Write_Datas = ''.join(self.extract_info(i) for i in range(35, 40))
+        self.Sensor_Read_Resister_Addresses = ''.join(self.extract_info(i) for i in range(41, 48))
+        self.EEPROM_Writing_Resister_Addresses = ''.join(self.extract_info(i) for i in range(49, 54))
+
 
 
 if __name__ == "__main__":
