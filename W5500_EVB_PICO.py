@@ -9,31 +9,47 @@ tcpSocket = None
 def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> None:
     global tcpSocket
 
-    spi = SPI(0, 2_000_000, mosi=Pin(19), miso=Pin(16), sck=Pin(18))
-    eth = network.WIZNET5K(spi, Pin(17), Pin(20))  # spi,cs,reset pin
-    eth.active(True)
+    try:
+        # SPI 및 W5500 초기화
+        spi = SPI(0, 2_000_000, mosi=Pin(19), miso=Pin(16), sck=Pin(18))
+        eth = network.WIZNET5K(spi, Pin(17), Pin(20))  # spi,cs,reset pin
+        eth.active(True)
 
-    # None DHCP, Set static network address
-    eth.ifconfig((ipAddress, '255.255.255.0', gateway, '0.0.0.0'))
+        # 네트워크 설정
+        eth.ifconfig((ipAddress, '255.255.255.0', gateway, '0.0.0.0'))
 
-    # TCP 클라이언트 소켓 생성 및 서버 연결
-    tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    tcpSocket.connect((server_ip, server_port))
-    tcpSocket.setblocking(False)
+        # TCP 클라이언트 소켓 생성 및 서버 연결
+        tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
-    print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
+        # 서버 접속 시도 (재시도 로직 포함)
+        while True:
+            try:
+                tcpSocket.connect((server_ip, server_port))
+                tcpSocket.setblocking(False)
+                print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
+                break
+            except Exception as e:
+                print(f"[-] Initialization Error: {str(e)}")
+                time.sleep(3)                                               # 3초 시도 후 재시도
+    except Exception as e :
+        print(f"[-] Initialization Error: {str(e)}")
+        tcpSocket = None                                                    # 소켓 초기화
+
+
+
 
 # 서버로부터 메시지 수신
 def readMessage() -> None:
     global tcpSocket
 
     try :
+        data, address = tcpSocket.recvfrom(1024)                # recvfrom 사용으로 address 반환
         data = tcpSocket.recv(1024)
         if data :
-            return data.decode()
+            return data.decode(), address
     except Exception as e:
         print(f"[-] Receive Error: {str(e)}")
-    return None
+    return None, None
 
 # 서버로 메시지 전송
 def sendMessage(msg: str) -> None:

@@ -1,5 +1,6 @@
 from machine import Pin, I2C
 import time
+import W5500_EVB_PICO as W5500
 
 FIRMWARE_VERSION = 0.1
 
@@ -13,8 +14,6 @@ class Main:
         # for device in devices:
         #     print(hex(device))
 
-        self.readSensorId()
-
         self.Slave_IDs = None
         self.Write_Protections = None
         self.Sensor_Streaming_Resister_Addresses = None
@@ -24,11 +23,17 @@ class Main:
         self.Sensor_Write_Datas = None
         self.Sensor_Read_Resister_Addresses = None
         self.EEPROM_Writing_Resister_Addresses = None
+        W5500.init(ipAddress='192.168.0.101', gateway='192.168.1.1', server_ip='192.168.1.1', server_port=8000)
+
+
+
 
     def func_1msec(self):
         pass
 
     def func_10msec(self):
+        message, address = W5500.readMessage()
+
         pass
 
     def func_20msec(self):
