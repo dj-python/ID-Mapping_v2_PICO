@@ -1,39 +1,119 @@
+# 4/15 코드 교육 내용
+
 from machine import Pin, I2C
 import time
-import W5500_EVB_PICO as W5500
 
-FIRMWARE_VERSION = 0.1
+FIRMWARE_VERSION = 0.0
 
 class Main:
     def __init__(self):
         self.sysLed_picoBrd = Pin(25, Pin.OUT)
 
-        self.i2c = I2C(0, scl=Pin(13), sda=Pin(12), freq=400000)
+        self.i2c_0 = I2C(0, scl=Pin(13), sda=Pin(12), freq=400000)
+        self.i2c_1 = I2C(1, scl=Pin(11), sda=Pin(10), freq=400000)
 
-        # devices = self.i2c.scan()
+        self.resetA = Pin(2, Pin.OUT)
+        self.resetB = Pin(3, Pin.OUT)
+        self.resetC = Pin(4, Pin.OUT)
+        self.resetD = Pin(5, Pin.OUT)
+
+        self.io1v8 = Pin(6, Pin.OUT)
+
+        self.resetA.off()
+        self.resetB.off()
+        self.resetC.off()
+        self.resetD.off()
+        self.io1v8.on()
+        time.sleep_ms(10)
+
+        # print('I2C_0 slave address:')
+        # devices = self.i2c_0.scan()
         # for device in devices:
         #     print(hex(device))
 
-        self.Slave_IDs = None
-        self.Write_Protections = None
-        self.Sensor_Streaming_Resister_Addresses = None
-        self.Sensor_Streaming_Datas = None
-        self.Sensor_Reading_Resister_Addresses = None
-        self.Sensor_Write_Resister_Addresses = None
-        self.Sensor_Write_Datas = None
-        self.Sensor_Read_Resister_Addresses = None
-        self.EEPROM_Writing_Resister_Addresses = None
-        W5500.init(ipAddress='192.168.0.101', gateway='192.168.1.1', server_ip='192.168.1.1', server_port=8000)
+        # print('I2C_1 slave address:')
+        # devices = self.i2c_1.scan()
+        # for device in devices:
+        #     print(hex(device))
 
+        # IODIR
+        data = bytearray([0x00])
+        self.i2c_1.writeto_mem(0x20, 0x00, data)
+        # temp = self.i2c_1.readfrom_mem(0x20, 0x00, 1)
+        # print(f'IODIR: {temp}')
 
+        data = bytearray([0x00])
+        self.i2c_1.writeto_mem(0x21, 0x00, data)
 
+        data = bytearray([0x00])
+        self.i2c_1.writeto_mem(0x22, 0x00, data)
+
+        data = bytearray([0x00])
+        self.i2c_1.writeto_mem(0x23, 0x00, data)
+
+        # Set GPIO
+        data = bytearray([0xff])
+        self.i2c_1.writeto_mem(0x20, 0x09, data)
+        # temp = self.i2c_1.readfrom_mem(0x20, 0x09, 1)
+        # print(f'GPIO: {temp}')
+
+        data = bytearray([0x00])
+        self.i2c_1.writeto_mem(0x21, 0x09, data)
+
+        data = bytearray([0x00])
+        self.i2c_1.writeto_mem(0x22, 0x09, data)
+
+        data = bytearray([0x00])
+        self.i2c_1.writeto_mem(0x23, 0x09, data)
+
+        time.sleep_ms(10)
+        self.resetA.on()
+        time.sleep_ms(10)
+
+        # I2C Selector
+        self.i2c_0.writeto(0x71, b'\x01')
+        # temp = self.i2c_0.readfrom(0x71, 1)
+        # print(temp)
+
+        print('I2C_0 slave address:')
+        devices = self.i2c_0.scan()
+        for device in devices:
+            print(hex(device))
+
+        self.readSensorId()
+        time.sleep_ms(10)
+
+        # Write protect: Disable
+        self.i2c_0.writeto(0x50, b'\xA0\x00\x06')
+        time.sleep_ms(10)  # Write cycle time: 5ms
+        # self.i2c_0.writeto(0x50, b'\xA0\x00')
+        # temp = self.i2c_0.readfrom(0x50, 1)
+        # print(f'E2P write protect: {temp}')
+
+        # Write data
+        self.i2c_0.writeto(0x50, b'\x7D\xE3\xAB\xAB\xCC')
+        time.sleep_ms(10)
+
+        # Read data
+        # self.i2c_0.writeto(0x50, b'\x7D\xE3')
+        # temp = self.i2c_0.readfrom(0x50, 15)
+        # print('temp:', temp)
+
+        # Write protect: Enable
+        self.i2c_0.writeto(0x50, b'\xA0\x00\x0E')
+        time.sleep_ms(10)  # Write cycle time: 5ms
+        # self.i2c_0.writeto(0x50, b'\xA0\x00')
+        # temp = self.i2c_0.readfrom(0x50, 1)
+        # print(f'E2P write protect: {temp}')
+
+        # Power Off
+        data = bytearray([0x00])
+        self.i2c_1.writeto_mem(0x20, 0x09, data)
 
     def func_1msec(self):
         pass
 
     def func_10msec(self):
-        message, address = W5500.readMessage()
-
         pass
 
     def func_20msec(self):
@@ -59,21 +139,21 @@ class Main:
 
     def readSensorId(self):
         print("Start readSensorId")
-        self.i2c.writeto(0x10, b'\x01\x3E\x00\xC8')
-        self.i2c.writeto(0x10, b'\x03\x04\x00\x03')
-        self.i2c.writeto(0x10, b'\x03\x06\x01\x13')
-        self.i2c.writeto(0x10, b'\x03\x0C\x00\x00')
-        self.i2c.writeto(0x10, b'\x03\x0E\x00\x03')
-        self.i2c.writeto(0x10, b'\x03\x10\x01\x7C')
-        self.i2c.writeto(0x10, b'\x03\x12\x00\x00')
-        self.i2c.writeto(0x10, b'\x01\x00\x01\x00')  # streaming On
+        self.i2c_0.writeto(0x10, b'\x01\x36\x13\x00')
+        self.i2c_0.writeto(0x10, b'\x01\x3E\x00\xC8')
+        self.i2c_0.writeto(0x10, b'\x03\x04\x00\x03')
+        self.i2c_0.writeto(0x10, b'\x03\x06\x01\x13')
+        self.i2c_0.writeto(0x10, b'\x03\x0C\x00\x00')
+        self.i2c_0.writeto(0x10, b'\x03\x0E\x00\x03')
+        self.i2c_0.writeto(0x10, b'\x03\x10\x01\x7C')
+        self.i2c_0.writeto(0x10, b'\x03\x12\x00\x00')
+        self.i2c_0.writeto(0x10, b'\x01\x00\x01\x00')  # streaming On
         time.sleep_ms(20)
-        self.i2c.writeto(0x10, b'\x0A\x02\x00\x00')
-        self.i2c.writeto(0x10, b'\x0A\x00\x01\x00')
+        self.i2c_0.writeto(0x10, b'\x0A\x02\x00\x00')
+        self.i2c_0.writeto(0x10, b'\x0A\x00\x01\x00')
         time.sleep_ms(10)
-
-        self.i2c.writeto(0x10, b'\x0A\x24')
-        optValue = self.i2c.readfrom(0x10, 6)
+        self.i2c_0.writeto(0x10, b'\x0A\x24')
+        optValue = self.i2c_0.readfrom(0x10, 6)
         print(f'0x0A24~0x0A29: {optValue}')
 
         optValue = int.from_bytes(optValue, 'big')
@@ -89,43 +169,43 @@ class Main:
         y_coordinate = int(str_optValue[37:45], 2)
         print(lot_id1, lot_id2, lot_id3, lot_id4, wf_no, x_coordinate, y_coordinate)
 
-        self.i2c.writeto(0x10, b'\x00\x19')
-        flag2 = self.i2c.readfrom(0x10, 1)
+        self.i2c_0.writeto(0x10, b'\x00\x19')
+        flag2 = self.i2c_0.readfrom(0x10, 1)
         print(f'Flag2: {flag2}')
 
-        self.i2c.writeto(0x10, b'\x00\x02')
-        revisionId1 = self.i2c.readfrom(0x10, 1)
+        self.i2c_0.writeto(0x10, b'\x00\x02')
+        revisionId1 = self.i2c_0.readfrom(0x10, 1)
         print(f'Revision_ID1: {revisionId1}')
 
-        self.i2c.writeto(0x10, b'\x00\x03')
-        revisionId2 = self.i2c.readfrom(0x10, 1)
+        self.i2c_0.writeto(0x10, b'\x00\x03')
+        revisionId2 = self.i2c_0.readfrom(0x10, 1)
         print(f'Revision_ID2: {revisionId2}')
 
-        self.i2c.writeto(0x10, b'\x00\x0D')
-        featureId1 = self.i2c.readfrom(0x10, 1)
+        self.i2c_0.writeto(0x10, b'\x00\x0D')
+        featureId1 = self.i2c_0.readfrom(0x10, 1)
         print(f'Feature_ID1: {featureId1}')
 
-        self.i2c.writeto(0x10, b'\x00\x0E')
-        featureId2 = self.i2c.readfrom(0x10, 1)
+        self.i2c_0.writeto(0x10, b'\x00\x0E')
+        featureId2 = self.i2c_0.readfrom(0x10, 1)
         print(f'Feature_ID2: {featureId2}')
 
-        self.i2c.writeto(0x10, b'\x00\x00')
-        modelId1 = self.i2c.readfrom(0x10, 1)
+        self.i2c_0.writeto(0x10, b'\x00\x00')
+        modelId1 = self.i2c_0.readfrom(0x10, 1)
         print(f'Model_ID1: {modelId1}')
 
-        self.i2c.writeto(0x10, b'\x00\x01')
-        modelId2 = self.i2c.readfrom(0x10, 1)
+        self.i2c_0.writeto(0x10, b'\x00\x01')
+        modelId2 = self.i2c_0.readfrom(0x10, 1)
         print(f'Model_ID2: {modelId2}')
 
-        self.i2c.writeto(0x10, b'\x00\x16')
-        flag0 = self.i2c.readfrom(0x10, 1)
+        self.i2c_0.writeto(0x10, b'\x00\x16')
+        flag0 = self.i2c_0.readfrom(0x10, 1)
         print(f'Flag0: {flag0}')
 
-        self.i2c.writeto(0x10, b'\x00\x18')
-        flag1 = self.i2c.readfrom(0x10, 1)
+        self.i2c_0.writeto(0x10, b'\x00\x18')
+        flag1 = self.i2c_0.readfrom(0x10, 1)
         print(f'Flag1: {flag1}')
 
-        self.i2c.writeto(0x10, b'\x0A\x00\x00\x00')
+        self.i2c_0.writeto(0x10, b'\x0A\x00\x00\x00')
         print('End readSensorId')
 
         sensorId = bytes()
@@ -147,37 +227,6 @@ class Main:
         sensorId += flag1
 
         print(f'Final sensor ID: {sensorId}')
-
-
-    # code by PDJ
-    # 텍스트 파일에서 '0x' 이후의 문자열만 추출하여 각 변수에 저장
-    def extract_info(self, index):
-        if '0x' in self.All_Info_data[index]:
-            start_index = self.All_Info_data[index].index('0x')
-            extracted_value = self.All_Info_data[index][start_index+2:start_index+6]
-            if extracted_value is not None:
-                print(extracted_value)
-                return extracted_value
-            return ''
-
-    # code by PDJ
-    # txt 파일로부터 읽어온 Info 리스트를 각 변수에 할당
-    def read_Sensor_info(self):
-        self.file_open = open('Sensor Info.txt', 'r')
-        self.All_Info_data = self.file_open.readlines()
-        self.file_open.close()
-        print(self.All_Info_data)
-
-        self.Slave_IDs = ''.join(self.extract_info(i) for i in range(4,8))
-        self.Write_Protections = ''.join(self.extract_info(i) for i in range(10, 13))
-        self.Sensor_Streaming_Resister_Addresses = ''.join(self.extract_info(i) for i in range(13, 18))
-        self.Sensor_Streaming_Datas = ''.join(self.extract_info(i) for i in range(19, 24))
-        self.Sensor_Reading_Resister_Addresses = ''.join(self.extract_info(i) for i in range(25, 28))
-        self.Sensor_Write_Resister_Addresses = ''.join(self.extract_info(i) for i in range(29, 34))
-        self.Sensor_Write_Datas = ''.join(self.extract_info(i) for i in range(35, 40))
-        self.Sensor_Read_Resister_Addresses = ''.join(self.extract_info(i) for i in range(41, 48))
-        self.EEPROM_Writing_Resister_Addresses = ''.join(self.extract_info(i) for i in range(49, 54))
-
 
 
 if __name__ == "__main__":
