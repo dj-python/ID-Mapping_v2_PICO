@@ -2,11 +2,12 @@
 
 from machine import Pin, I2C
 import time
+import W5500_EVB_PICO as W5500
 
 FIRMWARE_VERSION = 0.0
 
 class Main:
-    def __init__(self):
+    def __init__(self, server_ip, server_port):
         self.sysLed_picoBrd = Pin(25, Pin.OUT)
 
         self.i2c_0 = I2C(0, scl=Pin(13), sda=Pin(12), freq=400000)
@@ -25,6 +26,11 @@ class Main:
         self.resetD.off()
         self.io1v8.on()
         time.sleep_ms(10)
+
+        W5500.init(ipAddress='127.0.0.1', gateway='127.0.0.1', server_ip='127.0.0.1', server_port=8000)
+
+
+
 
         # print('I2C_0 slave address:')
         # devices = self.i2c_0.scan()
@@ -108,13 +114,20 @@ class Main:
 
         # Power Off
         data = bytearray([0x00])
+
         self.i2c_1.writeto_mem(0x20, 0x09, data)
+
 
     def func_1msec(self):
         pass
 
     def func_10msec(self):
-        pass
+        message, address = W5500.readMessage()
+        if message is not None:
+            print(message, address)
+
+
+
 
     def func_20msec(self):
         pass
@@ -231,7 +244,10 @@ class Main:
 
 if __name__ == "__main__":
     cnt_msec = 0
-    main = Main()
+    server_ip = '127.0.0.1'
+    server_port = 8000
+    main = Main(server_ip, server_port)
+
 
     while True:
         cnt_msec += 1
