@@ -39,7 +39,7 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
 
 
 # 서버로부터 메시지 수신
-def readMessage() -> None:
+def readMessage():
     global tcpSocket
 
     try :
@@ -50,6 +50,22 @@ def readMessage() -> None:
     except Exception as e:
         print(f"[-] Receive Error: {str(e)}")
     return None, None
+
+# 서버로부터 청크 데이터 수신 (스크립트 파일)
+def receiveChunks() -> bytes:
+    global tcpSocket
+
+    buffer = b""                                                # 바이트 단위 누적할 버퍼
+    try:
+        while True:
+            chunk = tcpSocket.recv(1024)
+            if not chunk:                                       # 더이상 읽을 데이터가 없으면 종료
+                break
+            buffer += chunk
+        return buffer                                           # 모든 청크를 누적한 결과 반환
+    except Exception as e:
+        print(f"[-] Error while receiving chunk: {str(e)}")
+        return None
 
 # 서버로 메시지 전송
 def sendMessage(msg: str) -> None:
