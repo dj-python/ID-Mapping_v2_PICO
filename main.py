@@ -8,6 +8,9 @@ FIRMWARE_VERSION = 0.0
 
 class Main:
     def __init__(self, server_ip, server_port):
+        self.is_script_sending = False                              # 스크립트 저장 상태
+        self.script_file_name = "script.txt"
+
         self.sysLed_picoBrd = Pin(25, Pin.OUT)
 
         self.i2c_0 = I2C(0, scl=Pin(13), sda=Pin(12), freq=400000)
@@ -28,9 +31,6 @@ class Main:
         time.sleep_ms(10)
 
         W5500.init(ipAddress='127.0.0.1', gateway='127.0.0.1', server_ip='127.0.0.1', server_port=8000)
-
-
-
 
         # print('I2C_0 slave address:')
         # devices = self.i2c_0.scan()
@@ -86,36 +86,18 @@ class Main:
         for device in devices:
             print(hex(device))
 
-        self.readSensorId()
         time.sleep_ms(10)
 
-        # Write protect: Disable
-        self.i2c_0.writeto(0x50, b'\xA0\x00\x06')
-        time.sleep_ms(10)  # Write cycle time: 5ms
-        # self.i2c_0.writeto(0x50, b'\xA0\x00')
-        # temp = self.i2c_0.readfrom(0x50, 1)
-        # print(f'E2P write protect: {temp}')
 
-        # Write data
-        self.i2c_0.writeto(0x50, b'\x7D\xE3\xAB\xAB\xCC')
-        time.sleep_ms(10)
-
-        # Read data
-        # self.i2c_0.writeto(0x50, b'\x7D\xE3')
-        # temp = self.i2c_0.readfrom(0x50, 15)
-        # print('temp:', temp)
-
-        # Write protect: Enable
-        self.i2c_0.writeto(0x50, b'\xA0\x00\x0E')
-        time.sleep_ms(10)  # Write cycle time: 5ms
-        # self.i2c_0.writeto(0x50, b'\xA0\x00')
-        # temp = self.i2c_0.readfrom(0x50, 1)
-        # print(f'E2P write protect: {temp}')
-
-        # Power Off
-        data = bytearray([0x00])
-
-        self.i2c_1.writeto_mem(0x20, 0x09, data)
+    def save_to_script_file(self, data):
+        """
+        데이터를 script.txt 파일에 한 줄씩 저장하는 함수
+        """
+        try:
+            with open(self.script_file_name, "a") as file:
+                file.write(data + "\n")                     #데이터를 한 줄씩 저장
+        except Exception as e:
+            print(f"Error saving to file: {e}")
 
 
     def func_1msec(self):
@@ -126,7 +108,49 @@ class Main:
         if message is not None:
             print(message, address)
 
+            if message is "Script send":
+                print("Starting script saving...")
+                self.is_script_sending = True
 
+            # 데이터 저장 중이면 파일에 저장
+            elif self.is_script_sending:
+                if message == "Script sending finished":
+                    print("Script saving finished")
+                    self.is_script_sending = False
+                else:
+                    self.save_to_script_file(message)
+
+
+            elif message == "[Read_Sensor]":
+                self.readSensorId()
+
+                # Write protect: Disable
+                self.i2c_0.writeto(0x50, b'\xA0\x00\x06')
+                time.sleep_ms(10)  # Write cycle time: 5ms
+                # self.i2c_0.writeto(0x50, b'\xA0\x00')
+                # temp = self.i2c_0.readfrom(0x50, 1)
+                # print(f'E2P write protect: {temp}')
+
+                # Write data
+                self.i2c_0.writeto(0x50, b'\x7D\xE3\xAB\xAB\xCC')
+                time.sleep_ms(10)
+
+                # Read data
+                # self.i2c_0.writeto(0x50, b'\x7D\xE3')
+                # temp = self.i2c_0.readfrom(0x50, 15)
+                # print('temp:', temp)
+
+                # Write protect: Enable
+                self.i2c_0.writeto(0x50, b'\xA0\x00\x0E')
+                time.sleep_ms(10)  # Write cycle time: 5ms
+                # self.i2c_0.writeto(0x50, b'\xA0\x00')
+                # temp = self.i2c_0.readfrom(0x50, 1)
+                # print(f'E2P write protect: {temp}')
+
+                # Power Off
+                data = bytearray([0x00])
+
+                self.i2c_1.writeto_mem(0x20, 0x09, data)
 
 
     def func_20msec(self):
