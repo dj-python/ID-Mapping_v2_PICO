@@ -30,7 +30,16 @@ class Main:
         self.io1v8.on()
         time.sleep_ms(10)
 
-        W5500.init(ipAddress='127.0.0.1', gateway='127.0.0.1', server_ip='127.0.0.1', server_port=8000)
+        self.gpioIn_ipsel1 = Pin(10, Pin.IN)
+        self.gpioIn_ipsel2 = Pin(12, Pin.IN)
+        self.gpioIn_ipsel3 = Pin(13, Pin.IN)
+        self.gpioIn_ipsel4 = Pin(14, Pin.IN)
+
+        ipAddress = '127.0.0.1'
+        portNumber = 8000
+
+
+        W5500.init(ipAddress=ipAddress, gateway='127.0.0.1', server_ip='127.0.0.1', server_port=portNumber)
 
         # print('I2C_0 slave address:')
         # devices = self.i2c_0.scan()
@@ -91,14 +100,19 @@ class Main:
 
     def save_to_script_file(self, data):
         """
-        데이터를 script.txt 파일에 한 줄씩 저장하는 함수
+        서버로부터 청크 데이터를 받아 script.txt 파일에 저장
         """
         try:
-            with open(self.script_file_name, "a") as file:
-                file.write(data + "\n")                     #데이터를 한 줄씩 저장
+            # 청크 데이터를 수신
+            data = W5500.receiveChunks()
+            if data:
+                with open(self.script_file_name, "a") as file:
+                    file.write(data+ "\n")                   # 데이터를 파일에 저장
+                    print(f"[*] Data saved to {self.script_file_name}")
+            else:
+                print("[!] No data received to save")
         except Exception as e:
-            print(f"Error saving to file: {e}")
-
+            print(f"[!] Error saving to file: {e}")
 
     def func_1msec(self):
         pass
