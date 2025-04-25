@@ -16,7 +16,7 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
         eth.active(True)
 
         # 네트워크 설정
-        eth.ifconfig((ipAddress, '255.255.255.0', gateway, '8.8.8.8'))
+        eth.ifconfig((ipAddress, '255.255.255.0', gateway, '0,0,0,0'))
 
         # TCP 클라이언트 소켓 생성 및 서버 연결
         tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
