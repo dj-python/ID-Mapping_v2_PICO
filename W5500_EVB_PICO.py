@@ -26,22 +26,31 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
         retries = 0
         while retries < max_retries:
             try:
+                tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+                tcpSocket.settimeout(10)
                 tcpSocket.connect((server_ip, server_port))
-                tcpSocket.setblocking(False)
+                tcpSocket.setblocking(False)                                    # Non-blocking mode
+                tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
                 print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
                 break
 
             except socket.timeout:
                 retries += 1
                 print(f"[-] Connection to TCP Server: {server_ip} : {server_port}")
+                if tcpSocket:
+                    tcpSocket.close()
                 time.sleep(3)
             except socket.error as e:
                 retries += 1
                 print(f"[-] Socket error: {e} (Attempt {retries}/{max_retries})")
+                if tcpSocket:
+                    tcpSocket.close()
                 time.sleep(3)
             except Exception as e:
                 retries += 1
                 print(f"[-] Unexpected Error: {e} (Attempt {retries}/{max_retries}")
+                if tcpSocket:
+                    tcpSocket.close()
                 time.sleep(3)
         else:
             print("[-] Failed to connect to server after maximum retries")
@@ -57,7 +66,7 @@ def readMessage():
     global tcpSocket
 
     try :
-        data, address = tcpSocket.recvfrom(1024)                # recvfrom 사용으로 address 반환
+        data, address = tcpSocket.recv(1024)                # address 반환
         data = tcpSocket.recv(1024)
         if data :
             return data.decode(), address
@@ -76,7 +85,10 @@ def receiveChunks() -> bytes:
             if not chunk:                                       # 더이상 읽을 데이터가 없으면 종료
                 break
             buffer += chunk
-        return buffer.decode()                                     # 모든 청크를 누적한 데이터를 디코딩하여 반환
+        return buffer.decode()                   # 모든 청크를 누적한 데이터를 디코딩하여 반환
+    except UnicodeDecodeError as e:
+        print(f"[-] Decoding error: {e}")
+        return None
     except Exception as e:
         print(f"[-] Error while receiving chunk: {str(e)}")
         return None
