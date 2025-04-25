@@ -3,6 +3,7 @@
 from machine import Pin, I2C
 import time
 import W5500_EVB_PICO as W5500
+import network
 
 FIRMWARE_VERSION = 0.0
 
@@ -134,7 +135,7 @@ class Main:
                     self.save_to_script_file(message)
 
 
-            elif message == "[Read_Sensor]":
+            elif message == "Read_Sensor":
                 self.readSensorId()
 
                 # Write protect: Disable
