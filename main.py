@@ -1,4 +1,4 @@
-# 4/15 코드 교육 내용
+# 4/15 코드 교육 내용 추가됨
 
 from machine import Pin, I2C
 import time
@@ -8,6 +8,7 @@ FIRMWARE_VERSION = 0.0
 
 class Main:
     def __init__(self, server_ip, server_port):
+        print('PICO Start')
         self.is_script_sending = False                              # 스크립트 저장 상태
         self.script_file_name = "script.txt"
 
@@ -36,10 +37,8 @@ class Main:
         self.gpioIn_ipsel4 = Pin(14, Pin.IN)
 
         ipAddress = '127.0.0.1'
-        portNumber = 8000
 
-
-        W5500.init(ipAddress=ipAddress, gateway='127.0.0.1', server_ip='127.0.0.1', server_port=portNumber)
+        W5500.init(ipAddress=ipAddress, gateway='127.0.0.1', server_ip=server_ip, server_port=server_port)
 
         # print('I2C_0 slave address:')
         # devices = self.i2c_0.scan()
@@ -122,7 +121,7 @@ class Main:
         if message is not None:
             print(message, address)
 
-            if message is "Script send":
+            if message == "Script send":
                 print("Starting script saving...")
                 self.is_script_sending = True
 
@@ -282,7 +281,7 @@ class Main:
 
 if __name__ == "__main__":
     cnt_msec = 0
-    server_ip = '127.0.0.1'
+    server_ip = '166.79.26.144'
     server_port = 8000
     main = Main(server_ip, server_port)
 
