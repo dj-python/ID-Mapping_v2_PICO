@@ -41,7 +41,10 @@ class Main:
         ipAddress = '192.168.1.100'
         gateway = '192.168.1.1'
 
-        W5500.init(ipAddress=ipAddress, gateway=gateway, server_ip=server_ip, server_port=server_port)
+        try:
+            W5500.init(ipAddress=ipAddress, gateway=gateway, server_ip=server_ip, server_port=server_port)
+        except Exception as e:
+            print(f"[-] Initialization Error: {str(e)}")
 
         # print('I2C_0 slave address:')
         # devices = self.i2c_0.scan()
@@ -284,7 +287,7 @@ class Main:
 
 if __name__ == "__main__":
     cnt_msec = 0
-    server_ip = '166.79.26.144'
+    server_ip = '192.168.1.1'
     server_port = 8000
     main = Main(server_ip, server_port)
 
