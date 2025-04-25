@@ -16,25 +16,39 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
         eth.active(True)
 
         # 네트워크 설정
-        eth.ifconfig((ipAddress, '255.255.255.0', gateway, '0.0.0.0'))
+        eth.ifconfig((ipAddress, '255.255.255.0', gateway, '8.8.8.8'))
 
         # TCP 클라이언트 소켓 생성 및 서버 연결
         tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # 서버 접속 시도 (재시도 로직 포함)
-        while True:
+        max_retries = 5
+        retries = 0
+        while retries < max_retries:
             try:
                 tcpSocket.connect((server_ip, server_port))
                 tcpSocket.setblocking(False)
                 print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
                 break
-            except Exception as e:
-                print(f"[-] Initialization Error: {str(e)}")
-                time.sleep(3)                                               # 3초 시도 후 재시도
-    except Exception as e :
-        print(f"[-] Initialization Error: {str(e)}")
-        tcpSocket = None                                                    # 소켓 초기화
 
+            except socket.timeout:
+                retries += 1
+                print(f"[-] Connection to TCP Server: {server_ip} : {server_port}")
+                time.sleep(3)
+            except socket.error as e:
+                retries += 1
+                print(f"[-] Socket error: {e} (Attempt {retries}/{max_retries})")
+                time.sleep(3)
+            except Exception as e:
+                retries += 1
+                print(f"[-] Unexpected Error: {e} (Attempt {retries}/{max_retries}")
+                time.sleep(3)
+        else:
+            print("[-] Failed to connect to server after maximum retries")
+            tcpSocket = None        # 소켓 초기화
+    except Exception as e:
+        print(f"[-] Initialization Error: {str(e)}")
+        tcpSocket = None    # 소켓 초기화
 
 
 
@@ -62,7 +76,7 @@ def receiveChunks() -> bytes:
             if not chunk:                                       # 더이상 읽을 데이터가 없으면 종료
                 break
             buffer += chunk
-        return buffer                                           # 모든 청크를 누적한 결과 반환
+        return buffer.decode()                                     # 모든 청크를 누적한 데이터를 디코딩하여 반환
     except Exception as e:
         print(f"[-] Error while receiving chunk: {str(e)}")
         return None
