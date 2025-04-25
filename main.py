@@ -10,6 +10,7 @@ FIRMWARE_VERSION = 0.0
 class Main:
     def __init__(self, server_ip, server_port):
         print('PICO Start')
+        print(dir(network))
         self.is_script_sending = False                              # 스크립트 저장 상태
         self.script_file_name = "script.txt"
 
@@ -37,9 +38,10 @@ class Main:
         self.gpioIn_ipsel3 = Pin(13, Pin.IN)
         self.gpioIn_ipsel4 = Pin(14, Pin.IN)
 
-        ipAddress = '127.0.0.1'
+        ipAddress = '192.168.1.100'
+        gateway = '192.168.1.1'
 
-        W5500.init(ipAddress=ipAddress, gateway='127.0.0.1', server_ip=server_ip, server_port=server_port)
+        W5500.init(ipAddress=ipAddress, gateway=gateway, server_ip=server_ip, server_port=server_port)
 
         # print('I2C_0 slave address:')
         # devices = self.i2c_0.scan()
