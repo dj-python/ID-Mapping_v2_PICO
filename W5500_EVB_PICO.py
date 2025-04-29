@@ -66,12 +66,13 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
 # 서버로부터 메시지 수신
 def readMessage():
     global tcpSocket
-
+    if tcpSocket is None:
+        print("[-] Error: TCP socket is not initialized")
+        return None, None
     try :
-        data, address = tcpSocket.recv(1024)                # address 반환
         data = tcpSocket.recv(1024)
         if data :
-            return data.decode(), address
+            return data.decode(), None
     except Exception as e:
         print(f"[-] Receive Error: {str(e)}")
     return None, None
