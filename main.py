@@ -33,11 +33,6 @@ class Main:
         self.io1v8.on()
         time.sleep_ms(10)
 
-        self.gpioIn_ipsel1 = Pin(10, Pin.IN)
-        self.gpioIn_ipsel2 = Pin(12, Pin.IN)
-        self.gpioIn_ipsel3 = Pin(13, Pin.IN)
-        self.gpioIn_ipsel4 = Pin(14, Pin.IN)
-
         ipAddress = '192.168.1.100'
         gateway = '192.168.1.1'
 
