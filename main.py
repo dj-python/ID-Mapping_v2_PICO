@@ -71,6 +71,8 @@ class Main:
         pass
 
     def func_10msec(self):
+        pass
+
         message, address = W5500.readMessage()
         if message is not None:
             print(message, address)
