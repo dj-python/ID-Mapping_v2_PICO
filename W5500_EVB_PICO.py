@@ -13,12 +13,13 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
 
     try:
         # SPI 및 W5500 초기화
-        spi = SPI(0, 2_000_000, polarity=0, phase=0, mosi=Pin(19), miso=Pin(16), sck=Pin(18))
+        spi = SPI(0, 1_000_000, polarity=0, phase=0, mosi=Pin(19), miso=Pin(16), sck=Pin(18))
         eth = network.WIZNET5K(spi, Pin(17), Pin(20))  # spi,cs,reset pin
         eth.active(True)
 
         # 네트워크 설정
-        eth.ifconfig((ipAddress, '255.255.255.0', gateway, '8,8,8,8'))
+        eth.ifconfig((ipAddress, '255.255.255.0', gateway, '8.8.8.8'))
+        print("Network Config:", eth.ifconfig())
 
         # TCP 클라이언트 소켓 생성 및 서버 연결
         tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
