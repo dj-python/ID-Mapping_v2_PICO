@@ -25,9 +25,7 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
         tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
         # 서버 접속 시도 (재시도 로직 포함)
-        max_retries = 5
-        retries = 0
-        while retries < max_retries:
+        while True:
             try:
                 tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 tcpSocket.settimeout(10)
@@ -38,26 +36,21 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
                 break
 
             except socket.timeout:
-                retries += 1
                 print(f"[-] Connection to TCP Server: {server_ip} : {server_port}")
                 if tcpSocket:
                     tcpSocket.close()
                 time.sleep(3)
             except socket.error as e:
-                retries += 1
-                print(f"[-] Socket error: {e} (Attempt {retries}/{max_retries})")
+                print(f"[-] Socket error: {e}")
                 if tcpSocket:
                     tcpSocket.close()
                 time.sleep(3)
             except Exception as e:
-                retries += 1
-                print(f"[-] Unexpected Error: {e} (Attempt {retries}/{max_retries}")
+                print(f"[-] Unexpected Error: {e}")
                 if tcpSocket:
                     tcpSocket.close()
                 time.sleep(3)
-        else:
-            print("[-] Failed to connect to server after maximum retries")
-            tcpSocket = None        # 소켓 초기화
+
     except Exception as e:
         print(f"[-] Initialization Error: {str(e)}")
         tcpSocket = None    # 소켓 초기화
