@@ -71,7 +71,9 @@ class Main:
         pass
 
     def func_10msec(self):
-        pass
+        if not W5500.is_initialized:
+            print("[-] TCP socket is not initialized, skipping readMessage.")
+            return
 
         message, address = W5500.readMessage()
         if message is not None:
@@ -283,7 +285,7 @@ class Main:
 
 if __name__ == "__main__":
     cnt_msec = 0
-    server_ip = '192.168.1.1'
+    server_ip = '192.168.1.2'
     server_port = 8000
     main = Main(server_ip, server_port)
 
