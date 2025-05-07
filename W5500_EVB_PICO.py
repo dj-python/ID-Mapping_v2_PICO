@@ -6,6 +6,7 @@ import network
 import socket
 
 tcpSocket = None
+is_initialized = False                  # 초디화 상태를 추적
 
 # 서버 준비 상태 확인 : Ping 메시지 보내기 (클라이언트가 먼저 켜져 있을 때 접속을 하지 않는 문제 보완하기 위해 추가 5/7)
 def is_server_ready(server_ip: str, server_port: int) -> bool:
@@ -21,7 +22,7 @@ def is_server_ready(server_ip: str, server_port: int) -> bool:
 
 # W5x00 chip init
 def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> None:
-    global tcpSocket
+    global tcpSocket, is_initialized
 
     try:
         # SPI 및 W5500 초기화
@@ -46,6 +47,7 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
                 tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 tcpSocket.settimeout(10)
                 tcpSocket.connect((server_ip, server_port))
+                is_initialized = True
                 tcpSocket.setblocking(False)                                    # Non-blocking mode
                 tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
                 print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
@@ -68,6 +70,7 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
                 time.sleep(3)
 
     except Exception as e:
+        is_initialized = False
         print(f"[-] Initialization Error: {str(e)}")
         tcpSocket = None    # 소켓 초기화
 
@@ -75,12 +78,12 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
 
 # 서버로부터 메시지 수신
 def readMessage():
-    global tcpSocket
-    if tcpSocket is None:
+    global tcpSocket, is_initialized
+    if not is_initialized or tcpSocket is None:
         print("[-] Error: TCP socket is not initialized")
         return None, None
     try :
-        data = tcpSocket.recv(1024)
+        data, addr = tcpSocket.recv(1024)
         if data :
             return data.decode(), None
     except Exception as e:
