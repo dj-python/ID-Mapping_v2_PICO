@@ -7,6 +7,18 @@ import socket
 
 tcpSocket = None
 
+# 서버 준비 상태 확인 : Ping 메시지 보내기 (클라이언트가 먼저 켜져 있을 때 접속을 하지 않는 문제 보완하기 위해 추가 5/7)
+def is_server_ready(server_ip: str, server_port: int) -> bool:
+    try:
+        # 서버 포트에 핑(ping) 메시지를 보냄
+        temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        temp_socket.settimeout(5)
+        temp_socket.connect((server_ip, server_port))
+        temp_socket.close()
+        return True
+    except (socket.timeout, socket.error):
+        return False
+
 # W5x00 chip init
 def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> None:
     global tcpSocket
@@ -21,8 +33,12 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
         eth.ifconfig((ipAddress, '255.255.255.0', gateway, '8.8.8.8'))
         print("Network Config:", eth.ifconfig())
 
-        # TCP 클라이언트 소켓 생성 및 서버 연결
-        tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        # 서버 준비 상태 확인
+        print("[*] Checking if server is ready...")
+        while not is_server_ready(server_ip, server_port):
+            print(f"[-] Server {server_ip}:{server_port} not ready. Retrying in 3 seconds...")
+            time.sleep(3)
+        print(f"[*] Server {server_ip}:{server_port} is ready. Attempting connection...")
 
         # 서버 접속 시도 (재시도 로직 포함)
         while True:
