@@ -4,6 +4,7 @@ from machine import Pin, I2C
 import time
 import W5500_EVB_PICO as W5500
 import network
+import socket
 
 FIRMWARE_VERSION = 0.0
 
@@ -11,6 +12,8 @@ class Main:
     def __init__(self, server_ip, server_port):
         print('PICO Start')
         print(dir(network))
+        print(dir(network.WIZNET5K))
+        # print(socket.__file__)
         self.is_script_sending = False                              # 스크립트 저장 상태
         self.script_file_name = "script.txt"
 
@@ -35,6 +38,8 @@ class Main:
 
         ipAddress = '192.168.1.100'
         gateway = '192.168.1.1'
+        # ipAddress = '166.79.26.100'
+        # gateway = '166.79.26.1'
 
         try:
             W5500.init(ipAddress=ipAddress, gateway=gateway, server_ip=server_ip, server_port=server_port)
@@ -45,7 +50,7 @@ class Main:
         # devices = self.i2c_0.scan()
         # for device in devices:
         #     print(hex(device))
-
+        #
         # print('I2C_1 slave address:')
         # devices = self.i2c_1.scan()
         # for device in devices:
