@@ -1,12 +1,10 @@
-from cmath import phase
-
 from machine import Pin, SPI
 import time
 import network
 import socket
 
 tcpSocket = None
-is_initialized = False                  # 초디화 상태를 추적
+is_initialized = False                  # 초기화 상태를 추적
 
 # 서버 준비 상태 확인 : Ping 메시지 보내기 (클라이언트가 먼저 켜져 있을 때 접속을 하지 않는 문제 보완하기 위해 추가 5/7)
 def is_server_ready(server_ip: str, server_port: int) -> bool:
@@ -31,7 +29,7 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
         eth.active(True)
 
         # 네트워크 설정
-        eth.ifconfig((ipAddress, '255.255.255.0', gateway, '8.8.8.8'))
+        eth.ifconfig((ipAddress, '255.255.255.0', '8.8.8.8', gateway))
         print("Network Config:", eth.ifconfig())
 
         # 서버 준비 상태 확인
@@ -101,10 +99,11 @@ def receiveChunks() -> bytes:
             if not chunk:                                       # 더이상 읽을 데이터가 없으면 종료
                 break
             buffer += chunk
-        return buffer.decode()                   # 모든 청크를 누적한 데이터를 디코딩하여 반환
-    except UnicodeDecodeError as e:
-        print(f"[-] Decoding error: {e}")
-        return None
+        try:
+            return buffer.decode()                   # 모든 청크를 누적한 데이터를 디코딩하여 반환
+        except UnicodeDecodeError as e:
+            print(f"[-] Decoding error: {e}")
+            return None
     except Exception as e:
         print(f"[-] Error while receiving chunk: {str(e)}")
         return None
@@ -115,7 +114,7 @@ def sendMessage(msg: str) -> None:
 
     try :
         # 메시지 전송
-        tcpSocket.sendall(msg.encode())
+        tcpSocket.sendall(msg.encode('utf-8'))
         print(f"[*] Message sent: {msg}")
     except Exception as e:
         print(f"[-] send Error: {str(e)}")
