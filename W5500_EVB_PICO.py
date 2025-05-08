@@ -2,21 +2,10 @@ from machine import Pin, SPI
 import time
 import network
 import socket
+# import traceback
 
 tcpSocket = None
 is_initialized = False                  # 초기화 상태를 추적
-
-# 서버 준비 상태 확인 : Ping 메시지 보내기 (클라이언트가 먼저 켜져 있을 때 접속을 하지 않는 문제 보완하기 위해 추가 5/7)
-def is_server_ready(server_ip: str, server_port: int) -> bool:
-    try:
-        # 서버 포트에 핑(ping) 메시지를 보냄
-        temp_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        temp_socket.settimeout(5)
-        temp_socket.connect((server_ip, server_port))
-        temp_socket.close()
-        return True
-    except (socket.timeout, socket.error):
-        return False
 
 # W5x00 chip init
 def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> None:
@@ -30,15 +19,10 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
 
         # 네트워크 설정
         eth.ifconfig((ipAddress, '255.255.255.0', '8.8.8.8', gateway))
-        print("Network Config:", eth.ifconfig())
+        print("[*] Network Config:", eth.ifconfig())
+        print(f"[*] Attempting connection to... {server_ip}:{server_port}")
 
-        # 서버 준비 상태 확인
-        print("[*] Checking if server is ready...")
-        while not is_server_ready(server_ip, server_port):
-            print(f"[-] Server {server_ip}:{server_port} not ready. Retrying in 3 seconds...")
-            time.sleep(3)
-        print(f"[*] Server {server_ip}:{server_port} is ready. Attempting connection...")
-
+        print('11111111')
         # 서버 접속 시도 (재시도 로직 포함)
         while True:
             try:
@@ -46,8 +30,8 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
                 tcpSocket.settimeout(10)
                 tcpSocket.connect((server_ip, server_port))
                 is_initialized = True
-                tcpSocket.setblocking(False)                                    # Non-blocking mode
-                tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
+                tcpSocket.setblocking(True)                                           # Non-blocking mode
+                # tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
                 print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
                 break
 
@@ -67,7 +51,9 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
                     tcpSocket.close()
                 time.sleep(3)
 
+
     except Exception as e:
+        # print(traceback.format_exc())
         is_initialized = False
         print(f"[-] Initialization Error: {str(e)}")
         tcpSocket = None    # 소켓 초기화
