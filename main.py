@@ -11,9 +11,6 @@ FIRMWARE_VERSION = 0.0
 class Main:
     def __init__(self, server_ip, server_port):
         print('PICO Start')
-        print(dir(network))
-        print(dir(network.WIZNET5K))
-        # print(socket.__file__)
         self.is_script_sending = False                              # 스크립트 저장 상태
         self.script_file_name = "script.txt"
 
