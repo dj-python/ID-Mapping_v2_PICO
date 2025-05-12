@@ -8,7 +8,7 @@ tcpSocket = None
 is_initialized = False                  # 초기화 상태를 추적
 
 # W5x00 chip init
-def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> None:
+def init(ipAddress: str, portNumber, gateway : str, server_ip : str, server_port: int) -> None:
     global tcpSocket, is_initialized
 
     try:
@@ -27,6 +27,7 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
             try:
                 tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
                 tcpSocket.settimeout(10)
+                tcpSocket.bind((ipAddress, portNumber))
                 tcpSocket.connect((server_ip, server_port))
                 is_initialized = True
                 tcpSocket.setblocking(True)                                           # Non-blocking mode
