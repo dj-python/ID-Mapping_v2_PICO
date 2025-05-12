@@ -34,12 +34,13 @@ class Main:
         time.sleep_ms(10)
 
         ipAddress = '192.168.1.100'
+        portNumber = 8001
         gateway = '192.168.1.1'
         # ipAddress = '166.79.26.100'
         # gateway = '166.79.26.1'
 
         try:
-            W5500.init(ipAddress=ipAddress, gateway=gateway, server_ip=server_ip, server_port=server_port)
+            W5500.init(ipAddress=ipAddress, portNumber=portNumber, gateway=gateway, server_ip=server_ip, server_port=server_port)
         except Exception as e:
             print(f"[-] Initialization Error: {str(e)}")
 
