@@ -78,9 +78,9 @@ class Main:
             print("[-] TCP socket is not initialized, skipping readMessage.")
             return
 
-        message, address = W5500.readMessage()
+        message = W5500.readMessage()
         if message is not None:
-            print(message, address)
+            print(message)
 
             if message == "Script send":
                 print("Starting script saving...")
