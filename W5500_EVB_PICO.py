@@ -8,7 +8,7 @@ tcpSocket = None
 is_initialized = False                  # 초기화 상태를 추적
 
 # W5x00 chip init
-def init(ipAddress: str, portNumber, gateway : str, server_ip : str, server_port: int) -> None:
+def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server_port: int) -> None:
     global tcpSocket, is_initialized
 
     try:
@@ -67,7 +67,7 @@ def readMessage():
         print("[-] Error: TCP socket is not initialized")
         return None, None
     try :
-        data, addr = tcpSocket.recv(1024)
+        data = tcpSocket.recv(1024)
         if data :
             return data.decode(), None
     except Exception as e:
@@ -80,13 +80,25 @@ def receiveChunks() -> bytes:
 
     buffer = b""                                                # 바이트 단위 누적할 버퍼
     try:
-        while True:
+        # 데이터 크기 먼저 수신
+        data_length = int(tcpSocket.recv(1024).decode('utf-8').strip())
+        received_length = 0
+
+        # 데이터 크기만큼 반복 수신
+        while received_length < data_length:
             chunk = tcpSocket.recv(1024)
             if not chunk:                                       # 더이상 읽을 데이터가 없으면 종료
                 break
             buffer += chunk
+            received_length += len(chunk)
+
+            # 종료 시그널 확인
+            if b'EOF' in buffer:
+                buffer = buffer.replace(b'EOF', b'')     # 종료 시그널 제거
+                break
+
         try:
-            return buffer.decode()                   # 모든 청크를 누적한 데이터를 디코딩하여 반환
+            return buffer.decode('utf-8')                   # 모든 청크를 누적한 데이터를 디코딩하여 반환
         except UnicodeDecodeError as e:
             print(f"[-] Decoding error: {e}")
             return None
