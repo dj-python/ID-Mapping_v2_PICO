@@ -58,17 +58,16 @@ class Main:
         """
         서버로부터 청크 데이터를 받아 script.txt 파일에 저장
         """
+
+        print(f"[REPL] {data}")
+
+        # script.txt 파일에 저장
         try:
-            # 청크 데이터를 수신
-            data = W5500.receiveChunks()
-            if data:
-                with open(self.script_file_name, "a") as file:
-                    file.write(data+ "\n")                   # 데이터를 파일에 저장
-                    print(f"[*] Data saved to {self.script_file_name}")
-            else:
-                print("[!] No data received to save")
+            with open("script.txt", "a", encoding="utf-8") as f:
+                f.write(data + "\n")
+            print("[Debug] script.txt에 데이터 저장 완료")
         except Exception as e:
-            print(f"[!] Error saving to file: {e}")
+            print(f"[Error] script.txt 파일 저장 중 오류 발생")
 
     def func_1msec(self):
         pass
@@ -86,14 +85,10 @@ class Main:
                 print("Starting script saving...")
                 self.is_script_sending = True
 
-            # 데이터 저장 중이면 파일에 저장
-            elif self.is_script_sending:
-                if message == "EOF":
-                    print("Script saving finished")
-                    self.is_script_sending = False
-                else:
-                    self.save_to_script_file(message)
-
+            elif message != "Script send" and self.is_script_sending and message != "EOF":
+                print(f"[Debug] save_to_script_file 함수 실행, message: {message}")
+                # 메시지 수신 및 처리
+                self.save_to_script_file(message)
 
             elif message == "Read_Sensor":
                 self.readSensorId()
