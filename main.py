@@ -6,6 +6,8 @@ import W5500_EVB_PICO as W5500
 import network
 import socket
 
+from W5500_EVB_PICO import tcpSocket, is_initialized
+
 FIRMWARE_VERSION = 0.0
 
 class Main:
@@ -77,7 +79,10 @@ class Main:
             print("[-] TCP socket is not initialized, skipping readMessage.")
             return
 
+        if tcpSocket is None or is_initialized:
+            print("[-] TCP Socket is not initialized or disconnected")
         message = W5500.readMessage()
+        print(f"[Debug] Message received in func_10msec: {message}")        # 디버깅 메시지
         if message is not None:
             print(message)
 
