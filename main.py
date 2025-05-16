@@ -81,13 +81,11 @@ class Main:
         pass
 
     def func_10msec(self):
-        global tcp_receive_buffer, script_buffer, is_script_sending
+        global tcp_receive_buffer, is_script_sending
 
         if not W5500.is_initialized:
             print("[-] TCP socket is not initialized, skipping readMessage.")
             return
-
-        ###
 
         # 1. 소켓에서 데이터 chunk 받아오기
         chunk = W5500.read_from_socket()
@@ -95,73 +93,66 @@ class Main:
             tcp_receive_buffer += chunk
 
         # 2. 버퍼에서 메시지 파싱
-        #   'Script send' 신호 수신 -> 스크립트 버퍼 초기화 및 수신 시작
-        #   'EOF' 수신 전까지 모두 누적 -> 'EOF' 도착 시 저장
+        #   'Script send' 신호 수신 -> 스크립트 수신 시작
+        #   'EOF' 수신 전까지 모두 누적 (decode 하지 않음) -> 'EOF' 도착 시 한번에 decode 하여 script.txt로 저장
         while True:
+            # Script send 신호 감지 및 스크립트 수신 시작
             if not is_script_sending and b"Script send" in tcp_receive_buffer:
                 idx = tcp_receive_buffer.index(b"Script send")
-                # Script send 앞에 데이터가 있다면 버린다 (불필요한 데이터 무시)
                 tcp_receive_buffer = tcp_receive_buffer[idx + len(b"Script send"):]
                 is_script_sending = True
-                script_buffer = ""
-                print("[Debug] Script 수신 시작")
                 continue
 
+            # 스크립트 수신 종료(EOF) 감지 및 저장
             if is_script_sending:
                 if b"EOF" in tcp_receive_buffer:
                     idx = tcp_receive_buffer.index(b"EOF")
-                    # "EOF" 앞까지 전체를 한번에 decode
-                    script_buffer += tcp_receive_buffer[:idx].decode('utf-8')
+                    # 오직 여기서만 decode!
+                    script_buffer = tcp_receive_buffer[:idx].decode('utf-8')
                     tcp_receive_buffer = tcp_receive_buffer[idx + len(b"EOF"):]
                     print("[Debug] Script 수신 완료 - 파일로 저장")
                     self.save_to_script_file(script_buffer)
-                    script_buffer = ""
                     is_script_sending = False
                 else:
-                    # EOF가 없으면 버퍼를 비우지 않고 계속 누적만 함.
+                    # EOF가 없으면 버퍼를 decode/비우지 않고 계속 누적만 함
                     break
 
-            # 스크립트 수신 중이면 남은 데이터 모두 누적 (아직 EOF가 안나왔을 때)
-            if is_script_sending and len(tcp_receive_buffer) > 0:
-                # 아직 EOF가 없을 때는 버퍼 전체를 일단 누적, 다음 루프에 계속 이어받음
-                script_buffer += tcp_receive_buffer.decode('utf-8')
-                tcp_receive_buffer = b""
-                break   # 다음 func_10msec에서 이어서 누적
+            break
 
 
 
-            if b"Read_Sensor" in tcp_receive_buffer:
-                idx = tcp_receive_buffer.index(b"Read Sensor")
-                tcp_receive_buffer = tcp_receive_buffer[:idx] + tcp_receive_buffer[idx+len(b"Read Sensor"):]
-                self.readSensorId()
+        if b"Read_Sensor" in tcp_receive_buffer:
+            idx = tcp_receive_buffer.index(b"Read Sensor")
+            tcp_receive_buffer = tcp_receive_buffer[:idx] + tcp_receive_buffer[idx+len(b"Read Sensor"):]
+            self.readSensorId()
 
-                # Write protect: Disable
-                self.i2c_0.writeto(0x50, b'\xA0\x00\x06')
-                time.sleep_ms(10)  # Write cycle time: 5ms
-                # self.i2c_0.writeto(0x50, b'\xA0\x00')
-                # temp = self.i2c_0.readfrom(0x50, 1)
-                # print(f'E2P write protect: {temp}')
+            # Write protect: Disable
+            self.i2c_0.writeto(0x50, b'\xA0\x00\x06')
+            time.sleep_ms(10)  # Write cycle time: 5ms
+            # self.i2c_0.writeto(0x50, b'\xA0\x00')
+            # temp = self.i2c_0.readfrom(0x50, 1)
+            # print(f'E2P write protect: {temp}')
 
-                # Write data
-                self.i2c_0.writeto(0x50, b'\x7D\xE3\xAB\xAB\xCC')
-                time.sleep_ms(10)
+            # Write data
+            self.i2c_0.writeto(0x50, b'\x7D\xE3\xAB\xAB\xCC')
+            time.sleep_ms(10)
 
-                # Read data
-                # self.i2c_0.writeto(0x50, b'\x7D\xE3')
-                # temp = self.i2c_0.readfrom(0x50, 15)
-                # print('temp:', temp)
+            # Read data
+            # self.i2c_0.writeto(0x50, b'\x7D\xE3')
+            # temp = self.i2c_0.readfrom(0x50, 15)
+            # print('temp:', temp)
 
-                # Write protect: Enable
-                self.i2c_0.writeto(0x50, b'\xA0\x00\x0E')
-                time.sleep_ms(10)  # Write cycle time: 5ms
-                # self.i2c_0.writeto(0x50, b'\xA0\x00')
-                # temp = self.i2c_0.readfrom(0x50, 1)
-                # print(f'E2P write protect: {temp}')
+            # Write protect: Enable
+            self.i2c_0.writeto(0x50, b'\xA0\x00\x0E')
+            time.sleep_ms(10)  # Write cycle time: 5ms
+            # self.i2c_0.writeto(0x50, b'\xA0\x00')
+            # temp = self.i2c_0.readfrom(0x50, 1)
+            # print(f'E2P write protect: {temp}')
 
-                # Power Off
-                data = bytearray([0x00])
+            # Power Off
+            data = bytearray([0x00])
 
-                self.i2c_1.writeto_mem(0x20, 0x09, data)
+            self.i2c_1.writeto_mem(0x20, 0x09, data)
 
     def func_20msec(self):
         pass
