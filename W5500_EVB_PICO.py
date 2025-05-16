@@ -72,7 +72,7 @@ def readMessage():
             return data.decode(), None
     except Exception as e:
         print(f"[-] Receive Error: {str(e)}")
-    return None, None
+    return None
 
 # 서버로부터 청크 데이터 수신 (스크립트 파일)
 def receiveChunks() -> bytes:
@@ -80,17 +80,14 @@ def receiveChunks() -> bytes:
 
     buffer = b""                                                # 바이트 단위 누적할 버퍼
     try:
-        # 데이터 크기 먼저 수신
-        data_length = int(tcpSocket.recv(1024).decode('utf-8').strip())
-        received_length = 0
-
-        # 데이터 크기만큼 반복 수신
-        while received_length < data_length:
+        while True:
             chunk = tcpSocket.recv(1024)
             if not chunk:                                       # 더이상 읽을 데이터가 없으면 종료
                 break
             buffer += chunk
-            received_length += len(chunk)
+
+            # 청크 데이터를 출력
+            print(chunk.decode('utf-8', errors='replace'))      # 디코딩 및 출력
 
             # 종료 시그널 확인
             if b'EOF' in buffer:
