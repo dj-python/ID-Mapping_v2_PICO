@@ -8,6 +8,11 @@ import socket
 
 from W5500_EVB_PICO import tcpSocket, is_initialized
 
+
+# 서버 메시지 수신 버퍼
+tcp_receive_buffer = b""
+script_buffer = ""
+
 FIRMWARE_VERSION = 0.0
 
 class Main:
@@ -75,25 +80,47 @@ class Main:
         pass
 
     def func_10msec(self):
+        global tcp_receive_buffer, script_buffer
         if not W5500.is_initialized:
             print("[-] TCP socket is not initialized, skipping readMessage.")
             return
 
-        if tcpSocket is None or is_initialized:
-            print("[-] TCP Socket is not initialized or disconnected")
-        message = W5500.readMessage()
-        print(f"[Debug] Message received in func_10msec: {message}")        # 디버깅 메시지
-        if message is not None:
-            print(message)
+        ###
 
+        # W5500에서 chunk만 받아온다
+        chunk = W5500.read_from_socket()
+        if chunk:
+            tcp_receive_buffer += chunk
+
+        # 메시지 파싱 로직
+        # 메시지 경계(\n) 또는  EOF가 있는지 확인
+        message = None
+        if b"EOF" in tcp_receive_buffer:
+            idx = tcp_receive_buffer.index(b"EOF")
+            msg = tcp_receive_buffer[:idx]
+            tcp_receive_buffer = tcp_receive_buffer[idx+len(b"EOF"):]
+            message = msg.decode('utf-8').strip()
+        elif b"\n" in tcp_receive_buffer:
+            idx = tcp_receive_buffer.index(b"\n")
+            msg = tcp_receive_buffer[:idx]
+            tcp_receive_buffer = tcp_receive_buffer[idx+1:]
+            message = msg.decode('utf-8').strip()
+
+        print(message)
+
+        if message is not None:
             if message == "Script send":
-                print("Starting script saving...")
+                script_buffer = ""          # 새로 버퍼 시작
                 self.is_script_sending = True
 
-            elif message != "Script send" and self.is_script_sending and message != "EOF":
-                print(f"[Debug] save_to_script_file 함수 실행, message: {message}")
-                # 메시지 수신 및 처리
-                self.save_to_script_file(message)
+            elif message == "EOF" and self.is_script_sending:
+                # 모든 청크를 다 받았으면 한번에 저장
+                self.save_to_script_file(script_buffer)
+                self.is_script_sending = False
+
+            elif self.is_script_sending:
+                # 스크립트 데이터 누적
+                script_buffer += message + "\n"
 
             elif message == "Read_Sensor":
                 self.readSensorId()
@@ -125,7 +152,6 @@ class Main:
                 data = bytearray([0x00])
 
                 self.i2c_1.writeto_mem(0x20, 0x09, data)
-
 
     def func_20msec(self):
         pass
@@ -313,3 +339,20 @@ if __name__ == "__main__":
             main.func_500msec()
 
         time.sleep_ms(1)
+
+
+"""
+        message = W5500.readMessage()
+        print(f"[Debug] Message received in func_10msec: \n{message}")        # 디버깅 메시지
+        if message is not None:
+            print(message)
+
+            if message == "Script send":
+                print("Starting script saving...")
+                self.is_script_sending = True
+
+            elif message != "Script send" and self.is_script_sending and message != "EOF":
+                print(f"[Debug] save_to_script_file 함수 실행, message: {message}")
+                # 메시지 수신 및 처리
+                self.save_to_script_file(message)
+"""
