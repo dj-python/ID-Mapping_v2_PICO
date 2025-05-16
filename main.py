@@ -88,7 +88,7 @@ class Main:
 
             # 데이터 저장 중이면 파일에 저장
             elif self.is_script_sending:
-                if message == "Script sending finished":
+                if message == "EOF":
                     print("Script saving finished")
                     self.is_script_sending = False
                 else:
