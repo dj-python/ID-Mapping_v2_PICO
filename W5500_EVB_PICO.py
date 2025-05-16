@@ -66,30 +66,33 @@ def readMessage():
     buffer = b""
     if not is_initialized or tcpSocket is None:
         print("[-] Error: TCP socket is not initialized")
-        return None, None
-    try :
+        return None
+
+    try:
         while True:
             chunk = tcpSocket.recv(1024)
             if not chunk:
-                print(f"[Debug] Received raw chunk: {chunk}")       # 수신된 청크 디버깅
+                print(f"[Debug] No data received, breaking loop.")
+                break
             buffer += chunk
-
-            # 디버깅 메시지 : 수신한 청크 데이터 출력
-            print(f"[Debug] Received chunk: {chunk[:50]}...")
 
             # 종료 시그널 "EOF" 확인
             if b"EOF" in buffer:
-                buffer = buffer.replace(b"EOF", b"")        # 종료 시그널 제거
+                buffer = buffer.replace(b"EOF", b"")
                 print("[Debug] EOF 수신 완료")
+                break
+            # 줄바꿈(\n) 단위 메시지 처리
+            if b'\n' in buffer:
+                print("[Debug] 줄바꿈 수신 완료")
                 break
 
         print(f"[Debug] Final buffer before decoding: {buffer}")
-        print(f"[Debug] Full received data: {buffer.decode('utf-8', errors='replace')}")
-        return buffer.decode('utf-8')       # 디코딩 후 반환
+        message = buffer.decode('utf-8', errors='replace').strip()
+        print(f"[Debug] 읽은 메시지: {message}")
+        return message
     except Exception as e:
         print(f"[Error] 데이터 수신 중 오류 발생: {e}")
         return None
-
 
 
 # 서버로부터 청크 데이터 수신 (스크립트 파일)
