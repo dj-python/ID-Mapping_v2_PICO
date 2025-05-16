@@ -107,16 +107,19 @@ class Main:
                 print("[Debug] Script 수신 시작")
                 continue
 
-            if is_script_sending and b"EOF" in tcp_receive_buffer:
-                idx = tcp_receive_buffer.index(b"EOF")
-                # "EOF" 앞까지가 스크립트 데이터
-                script_buffer += tcp_receive_buffer[:idx].decode('utf-8')
-                tcp_receive_buffer = tcp_receive_buffer[idx + len(b"EOF"):]
-                print("[Debug] Script 수신 완료 - 파일로 저장")
-                self.save_to_script_file(script_buffer)
-                script_buffer = ""
-                is_script_sending = False
-                continue
+            if is_script_sending:
+                if b"EOF" in tcp_receive_buffer:
+                    idx = tcp_receive_buffer.index(b"EOF")
+                    # "EOF" 앞까지 전체를 한번에 decode
+                    script_buffer += tcp_receive_buffer[:idx].decode('utf-8')
+                    tcp_receive_buffer = tcp_receive_buffer[idx + len(b"EOF"):]
+                    print("[Debug] Script 수신 완료 - 파일로 저장")
+                    self.save_to_script_file(script_buffer)
+                    script_buffer = ""
+                    is_script_sending = False
+                else:
+                    # EOF가 없으면 버퍼를 비우지 않고 계속 누적만 함.
+                    break
 
             # 스크립트 수신 중이면 남은 데이터 모두 누적 (아직 EOF가 안나왔을 때)
             if is_script_sending and len(tcp_receive_buffer) > 0:
