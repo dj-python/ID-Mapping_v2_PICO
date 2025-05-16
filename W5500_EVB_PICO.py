@@ -63,16 +63,32 @@ def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server
 # 서버로부터 메시지 수신
 def readMessage():
     global tcpSocket, is_initialized
+    buffer = b""
     if not is_initialized or tcpSocket is None:
         print("[-] Error: TCP socket is not initialized")
         return None, None
     try :
-        data = tcpSocket.recv(1024)
-        if data :
-            return data.decode(), None
+        while True:
+            chunk = tcpSocket.recv(1024)
+            if not chunk:
+                break
+            buffer += chunk
+
+            # 디버깅 메시지 : 수신한 청크 데이터 출력
+            print(f"[Debug] Received chunk: {chunk[:50]}...")
+
+            # 종료 시그널 "EOF" 확인
+            if b"EOF" in buffer:
+                buffer = buffer.replace(b"EOF", b"")        # 종료 시그널 제거
+                print("[Debug] EOF 수신 완료, 데이터 조립 완료")
+                break
+
+        return buffer.decode('utf-8')       # 디코딩 후 반환
     except Exception as e:
-        print(f"[-] Receive Error: {str(e)}")
-    return None
+        print(f"[Error] 데이터 수신 중 오류 발생: {e}")
+        return None
+
+
 
 # 서버로부터 청크 데이터 수신 (스크립트 파일)
 def receiveChunks() -> bytes:
