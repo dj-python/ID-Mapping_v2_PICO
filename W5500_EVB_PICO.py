@@ -58,7 +58,15 @@ def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server
         print(f"[-] Initialization Error: {str(e)}")
         tcpSocket = None    # 소켓 초기화
 
-
+def read_from_socket():
+    global tcpSocket
+    if tcpSocket is None:
+        return b""
+    try:
+        return tcpSocket.recv(1024)
+    except Exception as e:
+        print(f"[Error] socket recv fainled: {e}")
+        return b""
 
 # 서버로부터 메시지 수신
 def readMessage():
@@ -86,9 +94,8 @@ def readMessage():
                 print("[Debug] 줄바꿈 수신 완료")
                 break
 
-        print(f"[Debug] Final buffer before decoding: {buffer}")
-        message = buffer.decode('utf-8', errors='replace').strip()
-        print(f"[Debug] 읽은 메시지: {message}")
+        message = buffer.decode('utf-8').strip()
+        # print(f"[Debug] 읽은 메시지: {message}")
         return message
     except Exception as e:
         print(f"[Error] 데이터 수신 중 오류 발생: {e}")
