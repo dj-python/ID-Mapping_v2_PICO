@@ -1,15 +1,16 @@
+import _thread
 from machine import Pin, SPI
 import time
 import network
 import socket
-# import traceback
 
 tcpSocket = None
 is_initialized = False                  # 초기화 상태를 추적
+_ping_thread_running = False            # ping 송신 스레드 상태 플래그
 
 # W5x00 chip init
 def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server_port: int) -> None:
-    global tcpSocket, is_initialized
+    global tcpSocket, is_initialized, _ping_thread_running
 
     try:
         # SPI 및 W5500 초기화
@@ -33,6 +34,12 @@ def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server
                 tcpSocket.setblocking(True)                                           # Non-blocking mode
                 # tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
                 print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
+
+                # ping 송신 스레드 시작 (이미 실행 중이 아니면)
+                if not _ping_thread_running:
+                    _thread.start_new_thread(_ping_sender, ())
+                    _ping_thread_running = True
+
                 break
 
             except socket.timeout:
@@ -51,12 +58,30 @@ def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server
                     tcpSocket.close()
                 time.sleep(3)
 
-
     except Exception as e:
         # print(traceback.format_exc())
         is_initialized = False
         print(f"[-] Initialization Error: {str(e)}")
         tcpSocket = None    # 소켓 초기화
+
+def _ping_sender():
+    """3초마다 ping 메시지 전송"""
+    global tcpSocket, is_initialized, _ping_thread_running
+
+    try:
+        while is_initialized and tcpSocket:
+            try:
+                tcpSocket.sendall(b"ping\n")
+                print("[*] Ping sent")
+            except Exception as e:
+                print(f"[Error] ping send failed: {e}")
+                # ping 실패 시 연결 문제이므로 스레드 종료
+                break
+            time.sleep(3)
+    except Exception as e:
+        print(f"[Error] ping sender thread error: {e}")
+    finally:
+        _ping_thread_running = False            # 스레드 종료 시 플래그 리셋
 
 def read_from_socket():
     global tcpSocket
@@ -100,7 +125,6 @@ def readMessage():
     except Exception as e:
         print(f"[Error] 데이터 수신 중 오류 발생: {e}")
         return None
-
 
 # 서버로부터 청크 데이터 수신 (스크립트 파일)
 def receiveChunks() -> bytes:
