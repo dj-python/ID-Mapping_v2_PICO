@@ -41,8 +41,8 @@ class Main:
         self.io1v8.on()
         time.sleep_ms(10)
 
-        ipAddress = '192.168.1.100'
-        portNumber = 8001
+        ipAddress = '192.168.1.300'
+        portNumber = 8003
         gateway = '192.168.1.1'
         # ipAddress = '166.79.26.100'
         # gateway = '166.79.26.1'
@@ -71,8 +71,8 @@ class Main:
 
         # script.txt 파일에 저장
         try:
-            with open("script.txt", "a", encoding="utf-8") as f:
-                f.write(data + "\n")
+            with open("script.txt", "wb") as f:
+                f.write(data)
             print("[Debug] script.txt에 데이터 저장 완료")
         except Exception as e:
             print(f"[Error] script.txt 파일 저장 중 오류 발생")
