@@ -8,7 +8,6 @@ import socket
 
 from W5500_EVB_PICO import tcpSocket, is_initialized
 
-
 # 서버 메시지 수신 버퍼
 tcp_receive_buffer = b""    # 네트워크 수신 버퍼
 script_buffer = ""          # 스크립트 전체 누적 버퍼
@@ -41,8 +40,8 @@ class Main:
         self.io1v8.on()
         time.sleep_ms(10)
 
-        ipAddress = '192.168.1.300'
-        portNumber = 8003
+        ipAddress = '192.168.1.101'
+        portNumber = 8001
         gateway = '192.168.1.1'
         # ipAddress = '166.79.26.100'
         # gateway = '166.79.26.1'
@@ -83,9 +82,9 @@ class Main:
     def func_10msec(self):
         global tcp_receive_buffer, is_script_sending
 
-        if not W5500.is_initialized:
-            print("[-] TCP socket is not initialized, skipping readMessage.")
-            return
+        #if not W5500.is_initialized:
+        #    print("[-] TCP socket is not initialized, skipping readMessage.")
+        #    return
 
         # 1. 소켓에서 데이터 chunk 받아오기
         chunk = W5500.read_from_socket()
@@ -118,8 +117,6 @@ class Main:
                     break
 
             break
-
-
 
         if b"Read_Sensor" in tcp_receive_buffer:
             idx = tcp_receive_buffer.index(b"Read Sensor")
@@ -319,13 +316,48 @@ if __name__ == "__main__":
     server_port = 8000
     main = Main(server_ip, server_port)
 
+    # 상태머신 구조
+    # 상태 : "DISCONNECTED", "CONNECTED"
+    conn_state = "CONNECTED" if W5500.is_initialized else "DISCONNECTED"
+
+    ipAddress = '192.168.1.101'
+    portNumber = 8001
+    gateway = '192.168.1.1'
+
+    reconnect_timer = 0
 
     while True:
         cnt_msec += 1
+
+        # 연결이 끊어진 경우에만 재접속 시도
+        if conn_state == "DISCONNECTED":
+            if reconnect_timer <= 0:
+                print("[*] Trying to reconnect to server...")
+                try:
+                    W5500.init(ipAddress=ipAddress, portNumber=portNumber, gateway=gateway, server_ip=server_ip, server_port=server_port)
+                    if W5500.is_initialized:
+                        print("[*] Reconnected to server")
+                        conn_state = 'CONNECTED'
+                    else:
+                        print("[*] Reconnect failed")
+                except Exception as e:
+                    print(f"[-] Reconnect error: {e}")
+                reconnect_timer = 3000
+            else:
+                reconnect_timer -= 1
+
+        elif conn_state == "CONNECTED":
+
+            #연결된 상태에서 연결이 끊어졌는지 체크
+            if not W5500.is_initialized:
+                print("[-] Lost connection to server")
+                conn_state = 'DISCONNECTED'
+
         main.func_1msec()
 
         if not cnt_msec % 10:
-            main.func_10msec()
+            if W5500.is_initialized :
+                main.func_10msec()
 
         if not cnt_msec % 20:
             main.func_20msec()
@@ -356,4 +388,30 @@ if __name__ == "__main__":
                 print(f"[Debug] save_to_script_file 함수 실행, message: {message}")
                 # 메시지 수신 및 처리
                 self.save_to_script_file(message)
+
+
+    while True:
+        cnt_msec += 1
+        main.func_1msec()
+
+        if not cnt_msec % 10 and W5500.is_initialized :
+            main.func_10msec()
+
+        if not cnt_msec % 20:
+            main.func_20msec()
+
+        if not cnt_msec % 50:
+            main.func_50msec()
+
+        if not cnt_msec % 100:
+            main.func_100msec()
+
+        if not cnt_msec % 500:
+            main.func_500msec()
+
+        time.sleep_ms(1)
+
+
+
+
 """
