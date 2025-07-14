@@ -1,12 +1,7 @@
 # 4/15 코드 교육 내용 추가됨
-
 from machine import Pin, I2C
 import time
 import W5500_EVB_PICO as W5500
-import network
-import socket
-
-from W5500_EVB_PICO import tcpSocket, is_initialized
 
 # 서버 메시지 수신 버퍼
 tcp_receive_buffer = b""    # 네트워크 수신 버퍼
@@ -17,6 +12,7 @@ FIRMWARE_VERSION = 0.0
 
 class Main:
     def __init__(self, server_ip, server_port):
+        global ipAddress, portNumber
         print('PICO Start')
         self.is_script_sending = False                              # 스크립트 저장 상태
         self.script_file_name = "script.txt"
@@ -40,8 +36,8 @@ class Main:
         self.io1v8.on()
         time.sleep_ms(10)
 
-        ipAddress = '192.168.1.101'
-        portNumber = 8001
+        ipAddress = '192.168.1.104'
+        portNumber = 8004
         gateway = '192.168.1.1'
         # ipAddress = '166.79.26.100'
         # gateway = '166.79.26.1'
@@ -82,45 +78,66 @@ class Main:
     def func_10msec(self):
         global tcp_receive_buffer, is_script_sending
 
-        #if not W5500.is_initialized:
-        #    print("[-] TCP socket is not initialized, skipping readMessage.")
-        #    return
-
-        # 1. 소켓에서 데이터 chunk 받아오기
         chunk = W5500.read_from_socket()
         if chunk:
             tcp_receive_buffer += chunk
 
-        # 2. 버퍼에서 메시지 파싱
-        #   'Script send' 신호 수신 -> 스크립트 수신 시작
-        #   'EOF' 수신 전까지 모두 누적 (decode 하지 않음) -> 'EOF' 도착 시 한번에 decode 하여 script.txt로 저장
-        while True:
-            # Script send 신호 감지 및 스크립트 수신 시작
-            if not is_script_sending and b"Script send" in tcp_receive_buffer:
-                idx = tcp_receive_buffer.index(b"Script send")
-                tcp_receive_buffer = tcp_receive_buffer[idx + len(b"Script send"):]
-                is_script_sending = True
-                continue
+        self.handle_script_receive()
+        self.handle_read_sensor_request()
 
-            # 스크립트 수신 종료(EOF) 감지 및 저장
-            if is_script_sending:
-                if b"EOF" in tcp_receive_buffer:
-                    idx = tcp_receive_buffer.index(b"EOF")
-                    # 오직 여기서만 decode!
-                    script_buffer = tcp_receive_buffer[:idx].decode('utf-8')
-                    tcp_receive_buffer = tcp_receive_buffer[idx + len(b"EOF"):]
-                    print("[Debug] Script 수신 완료 - 파일로 저장")
-                    self.save_to_script_file(script_buffer)
-                    is_script_sending = False
-                else:
-                    # EOF가 없으면 버퍼를 decode/비우지 않고 계속 누적만 함
-                    break
+    def func_20msec(self):
+        pass
 
-            break
+    def func_50msec(self):
+        pass
 
+    def func_100msec(self):
+        pass
+
+    def func_500msec(self):
+        self.sysLed_picoBrd(not self.sysLed_picoBrd.value())
+        pass
+
+    @staticmethod
+    def decoding(value):
+        if value < 10:
+            result = value + 0x30
+        else:
+            result = value + 0x37
+        return result
+
+
+    def handle_script_receive(self):
+        global tcp_receive_buffer, is_script_sending, mcu_script_status
+
+        # Script send 신호 감지 및 스크립트 수신 시작
+        if not is_script_sending and b"Script send" in tcp_receive_buffer:
+            idx = tcp_receive_buffer.index(b"Script send")
+            tcp_receive_buffer = tcp_receive_buffer[idx + len(b"Script send"):]
+            is_script_sending = True
+            return
+
+        # 스크립트 수신 종료(EOF) 감지 및 저장
+        if is_script_sending and b"EOF" in tcp_receive_buffer:
+            idx = tcp_receive_buffer.index(b"EOF")
+            script_buffer = tcp_receive_buffer[:idx].decode('utf-8')
+            tcp_receive_buffer = tcp_receive_buffer[idx + len(b"EOF"):]
+            print("[Debug] Script 수신 완료 - 파일로 저장")
+            self.save_to_script_file(script_buffer)
+            is_script_sending = False
+            for mcu in range(1, 8):
+                msg = f"Script save finished: MCU{mcu}\n"
+                W5500.sendMessage(msg)
+
+        else:
+        # EOF가 없으면 버퍼를 decode/비우지 않고 계속 누적만 함
+            return
+
+    def handle_read_sensor_request(self):
+        global tcp_receive_buffer
         if b"Read_Sensor" in tcp_receive_buffer:
-            idx = tcp_receive_buffer.index(b"Read Sensor")
-            tcp_receive_buffer = tcp_receive_buffer[:idx] + tcp_receive_buffer[idx+len(b"Read Sensor"):]
+            idx = tcp_receive_buffer.index(b"Read_Sensor")
+            tcp_receive_buffer = tcp_receive_buffer[:idx] + tcp_receive_buffer[idx + len(b"Read_Sensor")]
             self.readSensorId()
 
             # Write protect: Disable
@@ -151,26 +168,6 @@ class Main:
 
             self.i2c_1.writeto_mem(0x20, 0x09, data)
 
-    def func_20msec(self):
-        pass
-
-    def func_50msec(self):
-        pass
-
-    def func_100msec(self):
-        pass
-
-    def func_500msec(self):
-        self.sysLed_picoBrd(not self.sysLed_picoBrd.value())
-        pass
-
-    @staticmethod
-    def decoding(value):
-        if value < 10:
-            result = value + 0x30
-        else:
-            result = value + 0x37
-        return result
 
     def readSensorId(self):
 
@@ -312,18 +309,18 @@ class Main:
 
 if __name__ == "__main__":
     cnt_msec = 0
+
+    ipAddress = '192.168.1.104'
+    portNumber = 8004
+    gateway = '192.168.1.1'
     server_ip = '192.168.1.2'
     server_port = 8000
+
     main = Main(server_ip, server_port)
 
     # 상태머신 구조
     # 상태 : "DISCONNECTED", "CONNECTED"
     conn_state = "CONNECTED" if W5500.is_initialized else "DISCONNECTED"
-
-    ipAddress = '192.168.1.101'
-    portNumber = 8001
-    gateway = '192.168.1.1'
-
     reconnect_timer = 0
 
     while True:
@@ -374,44 +371,50 @@ if __name__ == "__main__":
         time.sleep_ms(1)
 
 
-"""
-        message = W5500.readMessage()
-        print(f"[Debug] Message received in func_10msec: \n{message}")        # 디버깅 메시지
-        if message is not None:
-            print(message)
+    # IO 보드는 안정적인 재접속을 위해 루프 함수를 아래와 같이 변경함. (7/7)
+    # Writecard 도 향후 변경 검토 필요.
 
-            if message == "Script send":
-                print("Starting script saving...")
-                self.is_script_sending = True
-
-            elif message != "Script send" and self.is_script_sending and message != "EOF":
-                print(f"[Debug] save_to_script_file 함수 실행, message: {message}")
-                # 메시지 수신 및 처리
-                self.save_to_script_file(message)
-
-
-    while True:
-        cnt_msec += 1
-        main.func_1msec()
-
-        if not cnt_msec % 10 and W5500.is_initialized :
-            main.func_10msec()
-
-        if not cnt_msec % 20:
-            main.func_20msec()
-
-        if not cnt_msec % 50:
-            main.func_50msec()
-
-        if not cnt_msec % 100:
-            main.func_100msec()
-
-        if not cnt_msec % 500:
-            main.func_500msec()
-
-        time.sleep_ms(1)
-
-
-
-
-"""
+    # while True:
+    #     try:
+    #         cnt_msec += 1
+    #
+    #         # 항상 TCPClient 상태 확인, 끊어진 경우 즉시 재접속 시도
+    #         if not TCPClient.is_initialized:
+    #             conn_state = "DISCONNECTED"
+    #             if reconnect_timer <= 0:
+    #                 print("[*] Trying to reconnect to server...")
+    #                 main.try_init_tcp()
+    #                 if TCPClient.is_initialized:
+    #                     print("[*] Reconnected to server")
+    #                     conn_state = 'CONNECTED'
+    #                     reconnect_timer = 0
+    #                 else:
+    #                     print("[*] Reconnect failed")
+    #                     reconnect_timer = 3000
+    #             else:
+    #                 reconnect_timer -= 1
+    #         else:
+    #             conn_state = 'CONNECTED'
+    #
+    #         if not cnt_msec % 10:
+    #             if TCPClient.is_initialized :
+    #                 main.func_10msec()
+    #
+    #         if not cnt_msec % 25:
+    #             main.func_25msec()
+    #
+    #         if not cnt_msec % 100:
+    #             main.func_100msec()
+    #
+    #         if not cnt_msec % 500:
+    #             main.func_500msec()
+    #
+    #         time.sleep_ms(1)
+    #     except KeyboardInterrupt:
+    #         print("KeyboardInterrupt: cleaning up TCP...")
+    #         TCPClient.close_connection()
+    #         break
+    #     except Exception as e:
+    #         print("Exception in main loop", e)
+    #         import sys
+    #         sys.print_exception(e)
