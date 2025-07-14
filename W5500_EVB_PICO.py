@@ -18,6 +18,8 @@ def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server
             try: tcpSocket.close()
             except: pass
             tcpSocket = None
+        is_initialized = False
+        _ping_thread_running = False
 
         # SPI 및 W5500 초기화
         spi = SPI(0, 1_000_000, polarity=0, phase=0, mosi=Pin(19), miso=Pin(16), sck=Pin(18))
@@ -36,8 +38,8 @@ def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server
             tcpSocket.bind((ipAddress, portNumber))
             tcpSocket.connect((server_ip, server_port))
             is_initialized = True
-            tcpSocket.setblocking(True)                                           # Non-blocking mode
-            # tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
+            tcpSocket.setblocking(False)                                           # Non-blocking mode
+            tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
             print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
 
             # ping 송신 스레드 시작 (이미 실행 중이 아니면)
@@ -84,7 +86,10 @@ def _ping_sender():
             except Exception as e:
                 print(f"[Error] ping send failed: {e}")
                 is_initialized = False
-                # ping 실패 시 연결 문제이므로 스레드 종료
+                try:
+                    tcpSocket.close()
+                except: pass
+                tcpSocket = None
                 break
             time.sleep(3)
     except Exception as e:
@@ -96,9 +101,11 @@ def _ping_sender():
 def read_from_socket():
     global tcpSocket, is_initialized
     if tcpSocket is None:
+        is_initialized = False
         return b""
     try:
         return tcpSocket.recv(1024)
+
     except Exception as e:
         print(f"[Error] socket recv failed: {e}")
         is_initialized = False
@@ -173,18 +180,31 @@ def sendMessage(msg: str) -> None:
     global tcpSocket, is_initialized
 
     try :
+        if not is_initialized or tcpSocket is None:
+            print("[클라이언트] sendMessage: Not initialized, message not sent.")
+            return
         # 메시지 전송
         tcpSocket.sendall(msg.encode('utf-8'))
         print(f"[*] Message sent: {msg}")
     except Exception as e:
         print(f"[-] send Error: {str(e)}")
         is_initialized = False
+        if tcpSocket:
+            try:
+                tcpSocket.close()
+            except:
+                pass
+            tcpSocket = None
 
 # 소켓 종료
 def closeSocket() -> None:
-    global tcpSocket
-
+    global tcpSocket, is_initialized, _ping_thread_running
     if tcpSocket:
-        tcpSocket.close()
+        try:
+            tcpSocket.close()
+        except:
+            pass
         tcpSocket = None
+        is_initialized = False
+        _ping_thread_running = False
         print("[*] Disconnected from TCP Server")
