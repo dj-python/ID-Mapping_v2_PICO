@@ -36,14 +36,21 @@ class Main:
         self.io1v8.on()
         time.sleep_ms(10)
 
-        ipAddress = '192.168.1.104'
-        portNumber = 8004
-        gateway = '192.168.1.1'
+        self.ipAddress = '192.168.1.101'
+        self.portNumber = 8001
+        self.gateway = '192.168.1.1'
+        self.server_ip = server_ip
+        self.server_port = server_port
         # ipAddress = '166.79.26.100'
         # gateway = '166.79.26.1'
 
+    def try_init_tcp(self):
         try:
-            W5500.init(ipAddress=ipAddress, portNumber=portNumber, gateway=gateway, server_ip=server_ip, server_port=server_port)
+            W5500.init(ipAddress=self.ipAddress,
+                       portNumber=self.portNumber,
+                       gateway=self.gateway,
+                       server_ip=self.server_ip,
+                       server_port=self.server_port)
         except Exception as e:
             print(f"[-] Initialization Error: {str(e)}")
 
@@ -310,8 +317,8 @@ class Main:
 if __name__ == "__main__":
     cnt_msec = 0
 
-    ipAddress = '192.168.1.104'
-    portNumber = 8004
+    ipAddress = '192.168.1.101'
+    portNumber = 8001
     gateway = '192.168.1.1'
     server_ip = '192.168.1.2'
     server_port = 8000
@@ -324,51 +331,53 @@ if __name__ == "__main__":
     reconnect_timer = 0
 
     while True:
-        cnt_msec += 1
+        try:
+            cnt_msec += 1
 
-        # 연결이 끊어진 경우에만 재접속 시도
-        if conn_state == "DISCONNECTED":
-            if reconnect_timer <= 0:
-                print("[*] Trying to reconnect to server...")
-                try:
-                    W5500.init(ipAddress=ipAddress, portNumber=portNumber, gateway=gateway, server_ip=server_ip, server_port=server_port)
+            # 연결이 끊어진 경우에만 재접속 시도
+            if not W5500.is_initialized:
+                conn_state = "DISCONNECTED"
+                if reconnect_timer <= 0:
+                    print("[*] Trying to reconnect to server...")
+                    main.try_init_tcp()
                     if W5500.is_initialized:
                         print("[*] Reconnected to server")
                         conn_state = 'CONNECTED'
+                        reconnect_timer = 0
                     else:
                         print("[*] Reconnect failed")
-                except Exception as e:
-                    print(f"[-] Reconnect error: {e}")
-                reconnect_timer = 3000
+                        reconnect_timer = 3000
+                else:
+                    reconnect_timer -= 1
             else:
-                reconnect_timer -= 1
+                conn_state = "CONNECTED"
 
-        elif conn_state == "CONNECTED":
+            if not cnt_msec % 10:
+                if W5500.is_initialized :
+                    main.func_10msec()
 
-            #연결된 상태에서 연결이 끊어졌는지 체크
-            if not W5500.is_initialized:
-                print("[-] Lost connection to server")
-                conn_state = 'DISCONNECTED'
+            if not cnt_msec % 20:
+                main.func_20msec()
 
-        main.func_1msec()
+            if not cnt_msec % 50:
+                main.func_50msec()
 
-        if not cnt_msec % 10:
-            if W5500.is_initialized :
-                main.func_10msec()
+            if not cnt_msec % 100:
+                main.func_100msec()
 
-        if not cnt_msec % 20:
-            main.func_20msec()
+            if not cnt_msec % 500:
+                main.func_500msec()
 
-        if not cnt_msec % 50:
-            main.func_50msec()
+            time.sleep_ms(1)
+        except KeyboardInterrupt:
+            print("KeyboardInterrupt: cleaning up TCP...")
+            W5500.close_connection()
+            break
+        except Exception as e:
+            print("Exception in main loop", e)
+            import sys
+            sys.print_exception(e)
 
-        if not cnt_msec % 100:
-            main.func_100msec()
-
-        if not cnt_msec % 500:
-            main.func_500msec()
-
-        time.sleep_ms(1)
 
 
     # IO 보드는 안정적인 재접속을 위해 루프 함수를 아래와 같이 변경함. (7/7)
