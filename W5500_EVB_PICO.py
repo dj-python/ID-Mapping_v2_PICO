@@ -47,7 +47,6 @@ def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server
                 _thread.start_new_thread(_ping_sender, ())
                 _ping_thread_running = True
 
-
         #except socket.timeout:
         #    print(f"[-] Connection to TCP Server: {server_ip} : {server_port}")
         #    if tcpSocket:
@@ -67,10 +66,10 @@ def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server
                 tcpSocket = None
 
     except Exception as e:
-        # print(traceback.format_exc())
         print(f"[-] Initialization Error: {str(e)}")
         is_initialized = False
-        try: tcpSocket.close()
+        try:
+            if tcpSocket: tcpSocket.close()
         except: pass
         tcpSocket = None    # 소켓 초기화
 
@@ -97,20 +96,117 @@ def _ping_sender():
         is_initialized = False
     finally:
         _ping_thread_running = False            # 스레드 종료 시 플래그 리셋
+        print("[*] ping sender thread terminated")
 
 def read_from_socket():
     global tcpSocket, is_initialized
     if tcpSocket is None:
         is_initialized = False
-        return b""
+        return None
     try:
-        return tcpSocket.recv(1024)
-
+        data = tcpSocket.recv(1024)
+        if not data:
+            # 실제로 연결이 닫힌 경우만!
+            print("[*] Server closed connection (read 0 bytes)")
+            is_initialized = False
+            try:
+                tcpSocket.close()
+            except:
+                pass
+            tcpSocket = None
+            return None
+        return data
+    except OSError as e:
+        # 데이터 없음(논블로킹)일 때 연결 유지
+        if hasattr(e, 'errno') and e.errno == 11:
+            return None
+        print(f"[Error] socket recv failed: {e}")
+        is_initialized = False
+        try:
+            tcpSocket.close()
+        except:
+            pass
+        tcpSocket = None
+        return None
     except Exception as e:
         print(f"[Error] socket recv failed: {e}")
         is_initialized = False
-        return b""
+        try:
+            tcpSocket.close()
+        except:
+            pass
+        tcpSocket = None
+        return None
 
+
+
+# 서버로 메시지 전송
+def sendMessage(msg: str) -> None:
+    global tcpSocket, is_initialized
+    try :
+        if not is_initialized or tcpSocket is None:
+            print("[클라이언트] sendMessage: Not initialized, message not sent.")
+            return
+        # 메시지 전송
+        tcpSocket.sendall(msg.encode('utf-8'))
+        print(f"[*] Message sent: {msg}")
+    except Exception as e:
+        print(f"[-] send Error: {str(e)}")
+        is_initialized = False
+        if tcpSocket:
+            try:
+                tcpSocket.close()
+            except:
+                pass
+            tcpSocket = None
+
+def close_connection():
+    global tcpSocket, is_initialized, _ping_thread_running
+    if tcpSocket:
+        try:
+            tcpSocket.close()
+        except:
+            pass
+        tcpSocket = None
+    is_initialized = False
+    _ping_thread_running = False
+    print("[*] 서버 연결 종료")
+
+
+"""
+        # 서버로부터 청크 데이터 수신 (스크립트 파일)
+        def receiveChunks() -> bytes:
+            global tcpSocket, is_initialized
+
+            buffer = b""  # 바이트 단위 누적할 버퍼
+            try:
+                while True:
+                    chunk = tcpSocket.recv(1024)
+                    if not chunk:  # 더이상 읽을 데이터가 없으면 종료
+                        break
+                    buffer += chunk
+
+                    # 청크 데이터를 출력
+                    print(chunk.decode('utf-8', errors='replace'))  # 디코딩 및 출력
+
+                    # 종료 시그널 확인
+                    if b'EOF' in buffer:
+                        buffer = buffer.replace(b'EOF', b'')  # 종료 시그널 제거
+                        break
+
+                try:
+                    return buffer.decode('utf-8')  # 모든 청크를 누적한 데이터를 디코딩하여 반환
+                except UnicodeDecodeError as e:
+                    print(f"[-] Decoding error: {e}")
+                    return None
+            except Exception as e:
+                print(f"[-] Error while receiving chunk: {str(e)}")
+                is_initialized = False
+                return None
+"""
+
+
+"""
 # 서버로부터 메시지 수신
 def readMessage():
     global tcpSocket, is_initialized
@@ -144,67 +240,4 @@ def readMessage():
         print(f"[Error] 데이터 수신 중 오류 발생: {e}")
         is_initialized = False
         return None
-
-# 서버로부터 청크 데이터 수신 (스크립트 파일)
-def receiveChunks() -> bytes:
-    global tcpSocket, is_initialized
-
-    buffer = b""                                                # 바이트 단위 누적할 버퍼
-    try:
-        while True:
-            chunk = tcpSocket.recv(1024)
-            if not chunk:                                       # 더이상 읽을 데이터가 없으면 종료
-                break
-            buffer += chunk
-
-            # 청크 데이터를 출력
-            print(chunk.decode('utf-8', errors='replace'))      # 디코딩 및 출력
-
-            # 종료 시그널 확인
-            if b'EOF' in buffer:
-                buffer = buffer.replace(b'EOF', b'')     # 종료 시그널 제거
-                break
-
-        try:
-            return buffer.decode('utf-8')                   # 모든 청크를 누적한 데이터를 디코딩하여 반환
-        except UnicodeDecodeError as e:
-            print(f"[-] Decoding error: {e}")
-            return None
-    except Exception as e:
-        print(f"[-] Error while receiving chunk: {str(e)}")
-        is_initialized = False
-        return None
-
-# 서버로 메시지 전송
-def sendMessage(msg: str) -> None:
-    global tcpSocket, is_initialized
-
-    try :
-        if not is_initialized or tcpSocket is None:
-            print("[클라이언트] sendMessage: Not initialized, message not sent.")
-            return
-        # 메시지 전송
-        tcpSocket.sendall(msg.encode('utf-8'))
-        print(f"[*] Message sent: {msg}")
-    except Exception as e:
-        print(f"[-] send Error: {str(e)}")
-        is_initialized = False
-        if tcpSocket:
-            try:
-                tcpSocket.close()
-            except:
-                pass
-            tcpSocket = None
-
-# 소켓 종료
-def closeSocket() -> None:
-    global tcpSocket, is_initialized, _ping_thread_running
-    if tcpSocket:
-        try:
-            tcpSocket.close()
-        except:
-            pass
-        tcpSocket = None
-        is_initialized = False
-        _ping_thread_running = False
-        print("[*] Disconnected from TCP Server")
+"""
