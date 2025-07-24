@@ -36,18 +36,17 @@ class Main:
         self.io1v8.on()
         time.sleep_ms(10)
 
-        self.ipAddress = '192.168.1.101'
-        self.portNumber = 8001
+        self.ipAddress = '192.168.1.104'
         self.gateway = '192.168.1.1'
         self.server_ip = server_ip
         self.server_port = server_port
         # ipAddress = '166.79.26.100'
         # gateway = '166.79.26.1'
+        self.barcode_info = {}
 
     def try_init_tcp(self):
         try:
             W5500.init(ipAddress=self.ipAddress,
-                       portNumber=self.portNumber,
                        gateway=self.gateway,
                        server_ip=self.server_ip,
                        server_port=self.server_port)
@@ -317,8 +316,7 @@ class Main:
 if __name__ == "__main__":
     cnt_msec = 0
 
-    ipAddress = '192.168.1.101'
-    portNumber = 8001
+    ipAddress = '192.168.1.104'
     gateway = '192.168.1.1'
     server_ip = '192.168.1.2'
     server_port = 8000
