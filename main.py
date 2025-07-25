@@ -42,13 +42,6 @@ class Main:
         self.server_port = server_port
         # ipAddress = '166.79.26.100'
         # gateway = '166.79.26.1'
-        self.barcode_info = {}
-        self.is_barcode_receiving = False
-        self.sensor_ID = {'Module1':'FAKEID1',
-                          'Module2':'FAKEID2',
-                          'Module3':'FAKEID3',
-                          'Module4':'FAKEID4',
-                          'Module5':'FAKEID5'}
 
     def try_init_tcp(self):
         try:
@@ -87,32 +80,21 @@ class Main:
     def func_1msec(self):
         pass
 
-
     def func_10msec(self):
         global tcp_receive_buffer, is_script_sending
 
-        try:
-            chunk = W5500.read_from_socket()
-            if chunk:
-                tcp_receive_buffer += chunk
-        except Exception as e:
-            pass
+        chunk = W5500.read_from_socket()
+        if chunk:
+            tcp_receive_buffer += chunk
 
         self.handle_script_receive()
         self.handle_read_sensor_request()
-        self.handle_barcode_receive()
-
-
-
 
     def func_20msec(self):
         pass
 
     def func_50msec(self):
         pass
-
-
-
 
     def func_100msec(self):
         pass
@@ -191,59 +173,6 @@ class Main:
 
             self.i2c_1.writeto_mem(0x20, 0x09, data)
 
-    def handle_barcode_receive(self):
-        """
-        서버로부터 'barcode'로 시작하는 데이터를 받아서 barcode_info에 저장.
-        'barcode sending finished'가 오면 저장 종료 후 sensor_ID와 barcode_info를 서버로 송신.
-        """
-        global tcp_receive_buffer
-
-        # 바코드 데이터 수신 시작
-        while True:
-            # 바코드 시작 플래그가 없고, 'barcode'로 시작하는 데이터가 있으면 수신 시작
-            if not self.is_barcode_receiving and b'barcode' in tcp_receive_buffer:
-                self.is_barcode_receiving = True
-
-            # 바코드 수신 상태일 때만 처리
-            if self.is_barcode_receiving:
-                # 바코드 한 줄씩 추출
-                lines = tcp_receive_buffer.split(b'\n')
-                new_buffer = b''
-                for line in lines:
-                    # barcode로 시작하는 형식에 매칭되는지 확인
-                    if line.startswith(b'barcode'):
-                        try:
-                            text = line.decode('utf-8').strip()
-                            if ':' in text:
-                                key, value = text.split(':', 1)
-                                self.barcode_info[key.strip()] = value.strip()
-                        except Exception as e:
-                            print(f"[Error] 바코드 데이터 디코딩/저장 오류: {e}")
-                    elif b'barcode sending finished' in line:
-                        # 바코드 데이터 수신 종료
-                        self.is_barcode_receiving = False
-                        print("[Debug] barcode 데이터 저장 완료:", self.barcode_info)
-                        # 0.5초 대기 후 sensor_ID, barcode_info 전송
-                        time.sleep_ms(500)
-                        try:
-                            # sensor_ID 송신
-                            W5500.sendMessage(f"sensor_ID: {self.sensor_ID}\n")
-                            # barcode_info 송신
-                            W5500.sendMessage(f"barcode_info: {self.barcode_info}\n")
-                            print("[Debug] sensor_ID, barcode_info 서버로 송신 완료")
-                        except Exception as e:
-                            print(f"[Error] sensor_ID/barcode_info 송신 실패: {e}")
-                        # barcode sending finished 이후 남은 데이터는 버퍼에 남김
-                        idx = line.index(b'barcode sending finished')
-                        new_buffer += line[idx + len(b'barcode sending finished'):]
-                        print(self.barcode_info)
-                    else:
-                        # barcode, barcode sending finished와 무관한 데이터는 남겨두기
-                        new_buffer += line + b'\n'
-                tcp_receive_buffer = new_buffer
-                break
-            else:
-                break
 
     def readSensorId(self):
 
@@ -495,3 +424,4 @@ if __name__ == "__main__":
     #         print("Exception in main loop", e)
     #         import sys
     #         sys.print_exception(e)
+
