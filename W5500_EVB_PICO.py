@@ -9,7 +9,7 @@ is_initialized = False                  # 초기화 상태를 추적
 _ping_thread_running = False            # ping 송신 스레드 상태 플래그
 
 # W5x00 chip init
-def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server_port: int) -> None:
+def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> None:
     global tcpSocket, is_initialized, _ping_thread_running
 
     try:
@@ -35,11 +35,11 @@ def init(ipAddress: str, portNumber: int, gateway : str, server_ip : str, server
         try:
             tcpSocket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
             # tcpSocket.settimeout(10)
-            tcpSocket.bind((ipAddress, portNumber))
+            # tcpSocket.bind((ipAddress, portNumber))
             tcpSocket.connect((server_ip, server_port))
             is_initialized = True
             tcpSocket.setblocking(False)                                           # Non-blocking mode
-            tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
+            # tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
             print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
 
             # ping 송신 스레드 시작 (이미 실행 중이 아니면)
@@ -81,7 +81,7 @@ def _ping_sender():
         while is_initialized and tcpSocket:
             try:
                 tcpSocket.sendall(b"ping\n")
-                print("[*] Ping sent")
+                # print("[*] Ping sent")
             except Exception as e:
                 print(f"[Error] ping send failed: {e}")
                 is_initialized = False
@@ -90,7 +90,7 @@ def _ping_sender():
                 except: pass
                 tcpSocket = None
                 break
-            time.sleep(3)
+            time.sleep(1)
     except Exception as e:
         print(f"[Error] ping sender thread error: {e}")
         is_initialized = False
@@ -111,11 +111,17 @@ def read_from_socket():
             is_initialized = False
             try:
                 tcpSocket.close()
-            except:
+            except Exception:
                 pass
             tcpSocket = None
             return None
-        return data
+        try:
+            # 여기서 바로 디코딩해서 문자열(str)로 반환
+            decoded_data = data.decode('utf-8')
+        except Exception as e:
+            print(f"[Error] Data decode failed: {e}. Raw data: {data}")
+            decoded_data = ""
+        return decoded_data
     except OSError as e:
         # 데이터 없음(논블로킹)일 때 연결 유지
         if hasattr(e, 'errno') and e.errno == 11:
@@ -124,7 +130,7 @@ def read_from_socket():
         is_initialized = False
         try:
             tcpSocket.close()
-        except:
+        except Exception:
             pass
         tcpSocket = None
         return None
@@ -133,7 +139,7 @@ def read_from_socket():
         is_initialized = False
         try:
             tcpSocket.close()
-        except:
+        except Exception:
             pass
         tcpSocket = None
         return None
