@@ -2,11 +2,18 @@ import _thread
 from machine import Pin, SPI
 import time
 import network
-import socket
+# import socket
+try:
+    import usocket as socket
+except ImportError:
+    import socket
 
 tcpSocket = None
 is_initialized = False                  # 초기화 상태를 추적
 _ping_thread_running = False            # ping 송신 스레드 상태 플래그
+_ping_thread = None
+_socket_lock = _thread.allocate_lock()
+
 
 # W5x00 chip init
 def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> None:
@@ -37,9 +44,14 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
             # tcpSocket.settimeout(10)
             # tcpSocket.bind((ipAddress, portNumber))
             tcpSocket.connect((server_ip, server_port))
+
+
+
+
+
             is_initialized = True
             tcpSocket.setblocking(False)                                           # Non-blocking mode
-            # tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
+            tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
             print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
 
             # ping 송신 스레드 시작 (이미 실행 중이 아니면)
@@ -73,15 +85,33 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
         except: pass
         tcpSocket = None    # 소켓 초기화
 
+
+
+def start_ping_sender():
+    global _ping_thread, _ping_thread_running
+    if _ping_thread_running:
+        return
+    _ping_thread_running = True
+    try:
+        # MicroPython은 daemon 개념이 없고, 함수가 끝나면 스레드가 종료됩니다.
+        _ping_thread = _thread.start_new_thread(_ping_sender, ())
+    except Exception:
+        # 스레드 시작 실패 시 플래그 롤백
+        _ping_thread_running = False
+        raise
+
+
 def _ping_sender():
-    """3초마다 ping 메시지 전송"""
     global tcpSocket, is_initialized, _ping_thread_running
 
     try:
-        while is_initialized and tcpSocket:
+        while _ping_thread_running and is_initialized and tcpSocket:
             try:
+                with _socket_lock:
+                    sock=tcpSocket
+                if not sock:
+                    break
                 tcpSocket.sendall(b"ping\n")
-                # print("[*] Ping sent")
             except Exception as e:
                 print(f"[Error] ping send failed: {e}")
                 is_initialized = False
@@ -95,8 +125,37 @@ def _ping_sender():
         print(f"[Error] ping sender thread error: {e}")
         is_initialized = False
     finally:
-        _ping_thread_running = False            # 스레드 종료 시 플래그 리셋
+        _ping_thread_running = False
         print("[*] ping sender thread terminated")
+
+
+
+#
+#
+# def _ping_sender():
+#     """3초마다 ping 메시지 전송"""
+#     global tcpSocket, is_initialized, _ping_thread_running
+#
+#     try:
+#         while is_initialized and tcpSocket:
+#             try:
+#                 tcpSocket.sendall(b"ping\n")
+#                 # print("[*] Ping sent")
+#             except Exception as e:
+#                 print(f"[Error] ping send failed: {e}")
+#                 is_initialized = False
+#                 try:
+#                     tcpSocket.close()
+#                 except: pass
+#                 tcpSocket = None
+#                 break
+#             time.sleep(1)
+#     except Exception as e:
+#         print(f"[Error] ping sender thread error: {e}")
+#         is_initialized = False
+#     finally:
+#         _ping_thread_running = False            # 스레드 종료 시 플래그 리셋
+#         print("[*] ping sender thread terminated")
 
 def read_from_socket():
     global tcpSocket, is_initialized
