@@ -38,7 +38,7 @@ class Main:
         self.io1v8.on()
         time.sleep_ms(10)
 
-        self.ipAddress = '192.168.1.102'
+        self.ipAddress = '192.168.1.103'
         self.gateway = '192.168.1.1'
         self.server_ip = server_ip
         self.server_port = server_port
@@ -47,11 +47,11 @@ class Main:
 
         self.barcode_info = {}
         self.is_barcode_receiving = False
-        self.sensor_ID = {'Module1': 'FAKEID2-1',
-                          'Module2': 'FAKEID2-2',
-                          'Module3': 'FAKEID2-3',
-                          'Module4': 'FAKEID2-4',
-                          'Module5': 'FAKEID2-5'}
+        self.sensor_ID = {'Module1': 'FAKEID3-1',
+                          'Module2': 'FAKEID3-2',
+                          'Module3': 'FAKEID3-3',
+                          'Module4': 'FAKEID3-4',
+                          'Module5': 'FAKEID3-5'}
 
     def try_init_tcp(self):
         try:
@@ -448,7 +448,7 @@ class Main:
 if __name__ == "__main__":
     cnt_msec = 0
 
-    ipAddress = '192.168.1.102'
+    ipAddress = '192.168.1.103'
     gateway = '192.168.1.1'
     server_ip = '192.168.1.2'
     server_port = 8000
@@ -474,6 +474,7 @@ if __name__ == "__main__":
                         print("[*] Reconnected to server")
                         conn_state = 'CONNECTED'
                         reconnect_timer = 0
+                        W5500.start_ping_sender()
                     else:
                         print("[*] Reconnect failed")
                         reconnect_timer = 3000
