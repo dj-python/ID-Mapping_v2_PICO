@@ -45,13 +45,24 @@ def init(ipAddress: str, gateway : str, server_ip : str, server_port: int) -> No
             # tcpSocket.bind((ipAddress, portNumber))
             tcpSocket.connect((server_ip, server_port))
 
-
+            # TCP Keepalive (가능한 환경에서)
+            try:
+                tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+                try:
+                    # 일부 포트/펌웨어에서는 미지원일 수 있음
+                    tcpSocket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 10)
+                    tcpSocket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 3)
+                    tcpSocket.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 3)
+                except (AttributeError, OSError):
+                    pass
+            except (AttributeError, OSError):
+                pass
 
 
 
             is_initialized = True
             tcpSocket.setblocking(False)                                           # Non-blocking mode
-            tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
+            # tcpSocket.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)     # Keep alive
             print(f"[*] Connected to TCP Server: {server_ip} : {server_port}")
 
             # ping 송신 스레드 시작 (이미 실행 중이 아니면)
