@@ -1,58 +1,133 @@
-# 4/15 코드 교육 내용 추가됨
-from machine import Pin, I2C
+from machine import Pin, SPI
 import time
 import W5500_EVB_PICO as W5500
 from collections import OrderedDict
 
 # 서버 메시지 수신 버퍼
-tcp_receive_buffer = ""    # 네트워크 수신 버퍼
-script_buffer = ""          # 스크립트 전체 누적 버퍼
-is_script_sending = False   # 스크립트 수신 상태 플래그
+tcp_receive_buffer = ""  # 네트워크 수신 버퍼
+script_buffer = ""  # 스크립트 전체 누적 버퍼
+is_script_sending = False  # 스크립트 수신 상태 플래그
 
-FIRMWARE_VERSION = 0.0
+FIRMWARE_VERSION = 0.2
+
+SPI_SPEED = 12_000_000
+SPI_BUF_SIZE = 32
+DELAY_SPI_TX_RX = 0.000_01
+SPI_TX_RETRY = 0
+
+DEBUG_MODE = True
+
+class Error:
+    ERR_CURRENT     = 'ERR_CURRENT'
+    ERR_SPI         = 'ERR_COM'
+    ERR_SENSOR_ID   = 'ERR_SENSOR_ID'
+    ERR_VARIFY      = 'ERR_VARIFY'
+
 
 class Main:
     def __init__(self, server_ip, server_port):
-        global ipAddress, portNumber
-        print('PICO Start')
-        self.is_script_sending = False                              # 스크립트 저장 상태
+        self.sysLed_pico = Pin(25, Pin.OUT)
+
+        # region SPI
+        self.spi = SPI(1, baudrate=SPI_SPEED, polarity=0, phase=0, bits=8, sck=Pin(10), mosi=Pin(11), miso=Pin(12))
+        self.spi_cs_M1 = Pin(0, mode=Pin.OUT, value=1)
+        self.spi_cs_M2 = Pin(1, mode=Pin.OUT, value=1)
+        self.spi_cs_M3 = Pin(2, mode=Pin.OUT, value=1)
+        self.spi_cs_M4 = Pin(3, mode=Pin.OUT, value=1)
+        self.spi_cs_M5 = Pin(4, mode=Pin.OUT, value=1)
+        self.spi_cs_M6 = Pin(5, mode=Pin.OUT, value=1)
+        self.spi_cs_M7 = Pin(6, mode=Pin.OUT, value=1)
+        self.spi_cs_M8 = Pin(7, mode=Pin.OUT, value=1)
+
+        self.writeCard_sel1 = Pin(8, Pin.IN)
+        self.writeCard_sel2 = Pin(9, Pin.IN)
+        self.writeCard_sel3 = Pin(14, Pin.IN)
+        self.writeCard_sel4 = Pin(15, Pin.IN)
+        # endregion
+
+        # region TCP/IP
+        self.is_script_sending = False  # 스크립트 저장 상태
         self.script_file_name = "script.txt"
-
-
-        self.sysLed_picoBrd = Pin(25, Pin.OUT)
-
-        self.i2c_0 = I2C(0, scl=Pin(13), sda=Pin(12), freq=400000)
-        self.i2c_1 = I2C(1, scl=Pin(11), sda=Pin(10), freq=400000)
-
-        self.resetA = Pin(2, Pin.OUT)
-        self.resetB = Pin(3, Pin.OUT)
-        self.resetC = Pin(4, Pin.OUT)
-        self.resetD = Pin(5, Pin.OUT)
-
-        self.io1v8 = Pin(6, Pin.OUT)
-
-        self.resetA.off()
-        self.resetB.off()
-        self.resetC.off()
-        self.resetD.off()
-        self.io1v8.on()
-        time.sleep_ms(10)
-
-        self.ipAddress = '192.168.1.103'
+        # self.ipAddress = '192.168.1.104'
         self.gateway = '192.168.1.1'
         self.server_ip = server_ip
         self.server_port = server_port
-        # ipAddress = '166.79.26.100'
-        # gateway = '166.79.26.1'
 
+        self.barcode_sendStates = {}
         self.barcode_info = {}
-        self.is_barcode_receiving = False
-        self.sensor_ID = {'Module1': 'FAKEID3-1',
-                          'Module2': 'FAKEID3-2',
-                          'Module3': 'FAKEID3-3',
-                          'Module4': 'FAKEID3-4',
-                          'Module5': 'FAKEID3-5'}
+        self.isSumDelay_sensorId = None
+        self.delay_sensorId = int()
+        self.isRead_sensorId = False
+        self.sensorId = {}
 
+        self.gpioIn_ipSel1 = Pin(8, Pin.IN)
+        self.gpioIn_ipSel2 = Pin(9, Pin.IN)
+        self.gpioIn_ipSel3 = Pin(14, Pin.IN)
+        self.gpioIn_ipSel4 = Pin(15, Pin.IN)
+
+        self.ipAddress = ''
+        if self.gpioIn_ipSel1.value() == 1 and self.gpioIn_ipSel2.value() == 1 and self.gpioIn_ipSel3.value() == 1:
+            self.ipAddress = '192.168.1.101'
+        elif self.gpioIn_ipSel1.value() == 1 and self.gpioIn_ipSel2.value() == 1 and self.gpioIn_ipSel3.value() == 0:
+            self.ipAddress = '192.168.1.102'
+        elif self.gpioIn_ipSel1.value() == 1 and self.gpioIn_ipSel2.value() == 0 and self.gpioIn_ipSel3.value() == 1:
+            self.ipAddress = '192.168.1.103'
+        elif self.gpioIn_ipSel1.value() == 0 and self.gpioIn_ipSel2.value() == 1 and self.gpioIn_ipSel3.value() == 1:
+            self.ipAddress = '192.168.1.104'
+        # endregion
+
+        # self.sendScript(5)
+        # barcode = 'C9051A569000H5'
+        # self.sendBarcode(5, barcode)
+
+    # region time function
+    def func_1ms(self):
+        pass
+
+    def func_10ms(self):
+        global tcp_receive_buffer, is_script_sending
+
+        if W5500.is_initialized:
+            chunk = W5500.read_from_socket()
+
+            if chunk:
+                tcp_receive_buffer += chunk  # str + str 안전하게 누적
+
+            self.handle_script_receive()
+            self.handle_barcode_receive()
+
+    def func_20ms(self):
+        pass
+
+    def func_50ms(self):
+        pass
+
+    def func_100ms(self):
+        if self.isRead_sensorId:
+            self.sensorId = dict()
+
+            for key, value in self.barcode_sendStates.items():
+                if value == 'failed':
+                    self.sensorId[key] = Error.ERR_SPI
+                else:
+                    ret = self.readSensorId(int(key[-1]))
+
+                    if ret == 'failed':
+                        self.sensorId[key] = Error.ERR_SENSOR_ID
+                    elif ret == '0':
+                        self.sensorId[key] = Error.ERR_SENSOR_ID
+                    else:
+                        self.sensorId[key] = ret
+
+            W5500.sendMessage('sensor_ID: {}\n'.format(self.sensorId))
+            W5500.sendMessage('barcode_info: {}\n'.format(self.barcode_info))
+            self.isRead_sensorId = False
+
+    def func_500ms(self):
+        self.sysLed_pico(not self.sysLed_pico.value())
+    # endregion
+
+    # region About TCP/IP
     def try_init_tcp(self):
         try:
             W5500.init(ipAddress=self.ipAddress,
@@ -62,17 +137,8 @@ class Main:
         except Exception as e:
             print(f"[-] Initialization Error: {str(e)}")
 
-        # print('I2C_0 slave address:')
-        # devices = self.i2c_0.scan()
-        # for device in devices:
-        #     print(hex(device))
-        #
-        # print('I2C_1 slave address:')
-        # devices = self.i2c_1.scan()
-        # for device in devices:
-        #     print(hex(device))
-
-    def save_to_script_file(self, data):
+    @staticmethod
+    def save_to_script_file(data):
         """
         서버로부터 청크 데이터를 받아 script.txt 파일에 저장
         """
@@ -84,41 +150,6 @@ class Main:
             print("[Debug] script.txt에 데이터 저장 완료")
         except Exception as e:
             print(f"[Error] script.txt 파일 저장 중 오류 발생: {e}")
-
-    def func_1msec(self):
-        pass
-
-    def func_10msec(self):
-        global tcp_receive_buffer, is_script_sending
-
-        chunk = W5500.read_from_socket()
-        if chunk:
-            tcp_receive_buffer += chunk  # str + str 안전하게 누적
-
-        self.handle_script_receive()
-        self.handle_read_sensor_request()
-        self.handle_barcode_receive()
-
-    def func_20msec(self):
-        pass
-
-    def func_50msec(self):
-        pass
-
-    def func_100msec(self):
-        pass
-
-    def func_500msec(self):
-        self.sysLed_picoBrd(not self.sysLed_picoBrd.value())
-        pass
-
-    @staticmethod
-    def decoding(value):
-        if value < 10:
-            result = value + 0x30
-        else:
-            result = value + 0x37
-        return result
 
     def handle_script_receive(self):
         global tcp_receive_buffer, is_script_sending, mcu_script_status
@@ -138,321 +169,292 @@ class Main:
             print("[Debug] Script 수신 완료 - 파일로 저장")
             self.save_to_script_file(script_buffer)
             is_script_sending = False
-            for mcu in range(1, 9):
-                msg = f"Script save finished: MCU{mcu}\n"
-                W5500.sendMessage(msg)
 
+            start_time = time.ticks_ms()
+            for i in range(8):
+                ret = self.sendScript(i + 1)
+                msg = f"Script save {ret}: MCU{i + 1}\n"
+                W5500.sendMessage(msg)
+            end_time = time.ticks_ms()
+            print(f'Elapsed time: {time.ticks_diff(end_time, start_time) / 1000}ms')
         else:
             # EOF가 없으면 버퍼를 비우지 않고 계속 누적만 함
             return
 
-
     def handle_barcode_receive(self):
         """
-        서버로부터 'barcode'로 시작하는 데이터를 받아서 barcode_info에 저장.
-        'barcode sending finished'가 오면 저장 종료 후 sensor_ID와 barcode_info를 서버로 송신.
+        서버로부터 'barcode_info: { ... }' 형태의 딕셔너리 문자열을 수신해
+        그대로 self.barcode_info에 저장한다. 'barcode_info:' 프리픽스는 무시한다.
+        부분 수신을 고려해 중괄호 매칭으로 완전한 딕셔너리 본문이 모일 때까지 대기.
         """
         global tcp_receive_buffer
 
-        if not self.is_barcode_receiving and tcp_receive_buffer and ('barcode' in tcp_receive_buffer):
-            print('[Debug] barcode data detected in buffer:', tcp_receive_buffer)
-            self.is_barcode_receiving = True
+        if not tcp_receive_buffer:
+            return
 
-        if self.is_barcode_receiving and tcp_receive_buffer:
-            buffer_str = tcp_receive_buffer
-            finished_flag = 'barcode sending finished' in buffer_str
+        prefix = 'barcode_info:'
+        buf = tcp_receive_buffer
 
-            lines = []
-            buf = buffer_str
-            while True:
-                idx = buf.find('barcode')
-                if idx == -1:
+        # 프리픽스가 없으면 처리하지 않음
+        if prefix not in buf:
+            return
+
+        # 프리픽스 이후의 본문에서 딕셔너리 추출
+        prefix_idx = buf.find(prefix)
+        after = buf[prefix_idx + len(prefix):]
+
+        # 딕셔너리 시작 '{' 탐색
+        lbrace_idx = after.find('{')
+        if lbrace_idx == -1:
+            # 아직 본문 시작이 오지 않음
+            return
+
+        # 중괄호 레벨 카운팅으로 끝 위치 탐색
+        depth = 0
+        end_rel_idx = -1
+        for i, ch in enumerate(after[lbrace_idx:], start=lbrace_idx):
+            if ch == '{':
+                depth += 1
+            elif ch == '}':
+                depth -= 1
+                if depth == 0:
+                    end_rel_idx = i
                     break
-                next_idx = buf.find('barcode', idx + 1)
-                if next_idx != -1:
-                    line = buf[idx:next_idx]
-                    buf = buf[next_idx:]
-                else:
-                    line = buf[idx:]
-                    buf = ''
-                lines.append(line)
 
+        if end_rel_idx == -1:
+            # 아직 전체 딕셔너리가 수신되지 않음
+            return
+
+        dict_str = after[lbrace_idx:end_rel_idx + 1]
+
+        # 파싱 시도: JSON 우선, 실패 시 literal_eval 폴백
+        parsed = None
+        try:
+            try:
+                import ujson as json
+            except:
+                import json  # type: ignore
+            json_str = dict_str.replace("'", '"')
+            parsed = json.loads(json_str)
+        except Exception as e:
+            try:
+                import ast  # type: ignore
+                parsed = ast.literal_eval(dict_str)
+            except Exception as e2:
+                print("[Error] barcode_info 파싱 실패:", e, e2)
+                return
+
+        if not isinstance(parsed, dict):
+            print("[Error] barcode_info 형식 오류: dict 아님 ->", type(parsed))
+            return
+
+        self.barcode_info = parsed
+        print("[Debug] barcode_info dict 저장 완료:", self.barcode_info)
+
+        self.barcode_sendStates = dict()
+        for key, value in self.barcode_info.items():
+            ret = self.sendBarcode(int(key[-1]), value)
+            self.barcode_sendStates[key] = ret
+
+        time.sleep((self.delay_sensorId + 100) / 1000)
+        self.isRead_sensorId = True
+
+        # 소비한 데이터 제거 (+ 선택적으로 종료 토큰 제거)
+        consumed_end = prefix_idx + len(prefix) + end_rel_idx + 1
+        remainder = buf[consumed_end:]
+        finish_token = 'barcode sending finished'
+        if finish_token in remainder:
+            remainder = remainder.replace(finish_token, '')
+        tcp_receive_buffer = remainder
+        # self.is_barcode_receiving = False
+    # endregion
+
+    # region About MCU
+    def sendScript(self, target) -> str:
+        with open('script.txt', 'r', encoding='utf-8') as f:
+            lines = f.readlines()
             for line in lines:
-                if 'barcode sending finished' in line:
-                    continue
-                if ':' in line:
-                    try:
-                        key, value = line.split(':', 1)
-                        key = key.strip()
-                        value = value.strip()
-                        self.barcode_info[key] = value
-                    except Exception as e:
-                        print("[Error] 바코드 데이터 디코딩/저장 오류:", e)
+                msg = line.strip().replace(' ', '').upper()
 
-            if finished_flag:
-                self.is_barcode_receiving = False
-                # 바코드 키를 기준으로 정렬
-                sorted_barcode_info = OrderedDict(
-                    sorted(self.barcode_info.items(), key=lambda x: int(x[0].replace('barcode', ''))))
-                print("[Debug] barcode 데이터 저장 완료:", sorted_barcode_info)
-                import time
-                time.sleep(0.5)
-                try:
-                    W5500.sendMessage("sensor_ID: {}\n".format(self.sensor_ID))
-                    W5500.sendMessage("barcode_info: {}\n".format(sorted_barcode_info))
-                    print("[Debug] sensor_ID, barcode_info 서버로 송신 완료")
-                except Exception as e:
-                    print("[Error] sensor_ID/barcode_info 송신 실패:", e)
-                idx = buffer_str.find('barcode sending finished')
-                remain_str = buffer_str[idx + len('barcode sending finished'):]
-                tcp_receive_buffer = remain_str
+                if line[0] != ';' and line[0:2] != '\r\n' and line[0] != '\n':
+                    sendBytes = b'\x01\x00' + int.to_bytes(len(msg), 2, 'big')
+                    sub_msg = self.convert_hex_as_int(msg)
+                    sendBytes += bytearray(sub_msg, 'utf-8')
+
+                    while len(sendBytes) < (SPI_BUF_SIZE - 2):
+                        sendBytes += b'\xFF'
+
+                    checksum = self.getChecksum(sendBytes)
+                    sendBytes += int.to_bytes(checksum, 2, 'big')
+
+                    fail_cnt = 0
+                    while True:
+                        self.sendDataBySpi(sendBytes, target)
+                        time.sleep(DELAY_SPI_TX_RX)
+                        if b'#SCRIPT_START' in sendBytes:
+                            self.delay_sensorId = 0
+                            time.sleep(0.05)
+
+                        if b'#POWER_SETTING' in sendBytes or b'#READ_SENSOR_ID' in sendBytes:
+                            if b'#POWER_SETTING' in sendBytes:
+                                self.isSumDelay_sensorId = 'POWER_SETTING'
+                            else:
+                                self.isSumDelay_sensorId = 'READ_SENSOR_ID'
+                        elif (b'#MODEL_INFO' in sendBytes or b'#SLAVE_ADDRESS' in sendBytes or
+                              b'#MEMORY_PROTECTION_DISABLE' in sendBytes or b'#WRITE_BARCODE' in sendBytes or
+                              b'#MEMORY_PROTECTION_ENABLE' in sendBytes or b':END' in sendBytes):
+                            self.isSumDelay_sensorId = None
+
+                        if self.isSumDelay_sensorId == 'POWER_SETTING':
+                            if b'#POWER_SETTING' not in sendBytes:
+                                self.delay_sensorId += int(msg.split(',')[2])
+                        elif self.isSumDelay_sensorId == 'READ_SENSOR_ID':
+                            if b'#READ_SENSOR_ID' not in sendBytes:
+                                self.delay_sensorId += int(msg.split(',')[6])
+
+                        rxVal = self.receiveDataBySpi(SPI_BUF_SIZE, target)
+                        if checksum == int.from_bytes(rxVal[SPI_BUF_SIZE - 2:], 'big'):
+                            break
+                        else:
+                            fail_cnt += 1
+                            if fail_cnt > SPI_TX_RETRY:
+                                print(f'Error: Failed update script')
+                                return 'failed'
+                            else:
+                                print(f'Warning: Failed checksum, TX Retry{fail_cnt}')
+        return 'finished'
+
+    def sendBarcode(self, target, barcode) -> str:
+        sendBytes = b'\x02\x00' + int.to_bytes(len(barcode), 2, 'big')
+        sendBytes += bytearray(barcode, 'utf-8')
+
+        while len(sendBytes) < (SPI_BUF_SIZE - 2):
+            sendBytes += b'\xFF'
+
+        checksum = self.getChecksum(sendBytes)
+        sendBytes += int.to_bytes(checksum, 2, 'big')
+
+        fail_cnt = 0
+        while True:
+            self.sendDataBySpi(sendBytes, target)
+            time.sleep(DELAY_SPI_TX_RX)
+
+            rxVal = self.receiveDataBySpi(SPI_BUF_SIZE, target)
+            if checksum == int.from_bytes(rxVal[SPI_BUF_SIZE - 2:], 'big'):
+                break
             else:
-                tcp_receive_buffer = ""
-
-    """
-    def handle_barcode_receive(self):
-        
-        서버로부터 'barcode'로 시작하는 데이터를 받아서 barcode_info에 저장.
-        'barcode sending finished'가 오면 저장 종료 후 sensor_ID와 barcode_info를 서버로 송신.
-        
-        global tcp_receive_buffer
-
-        # 바코드 데이터 수신 시작 조건
-        # tcp_receive_buffer는 str로 관리, 바로 파싱
-        if not self.is_barcode_receiving and tcp_receive_buffer and ('barcode' in tcp_receive_buffer):
-            print('[Debug] barcode data detected in buffer:', tcp_receive_buffer)
-            self.is_barcode_receiving = True
-
-        # 바코드 수신 상태일 때만 처리
-        if self.is_barcode_receiving and tcp_receive_buffer:
-            buffer_str = tcp_receive_buffer  # 이미 str이므로 변환 불필요
-
-            # "barcode sending finished"가 있으면 수신 종료
-            finished_flag = 'barcode sending finished' in buffer_str
-
-            # 여러 바코드가 붙어 있을 수 있으니, "barcode" 기준으로 분리
-            lines = []
-            buf = buffer_str
-            # barcode로 시작하는 구문 여러 개를 분리
-            while True:
-                idx = buf.find('barcode')
-                if idx == -1:
-                    break
-                next_idx = buf.find('barcode', idx + 1)
-                if next_idx != -1:
-                    line = buf[idx:next_idx]
-                    buf = buf[next_idx:]
+                fail_cnt += 1
+                if fail_cnt > SPI_TX_RETRY:
+                    print(f'MCU_{target} >> Error: Failed send barcode')
+                    return 'failed'
                 else:
-                    line = buf[idx:]
-                    buf = ''
-                lines.append(line)
+                    print(f'MCU_{target} >> Warning: Failed checksum, TX Retry{fail_cnt}')
+        return 'finished'
 
-            # 각 라인 처리
-            for line in lines:
-                # 'barcode sending finished'는 종료플래그로만 처리
-                if 'barcode sending finished' in line:
-                    continue
-                # 실제 바코드 데이터만 파싱
-                if ':' in line:
-                    try:
-                        key, value = line.split(':', 1)
-                        key = key.strip()
-                        value = value.strip()
-                        self.barcode_info[key] = value
-                    except Exception as e:
-                        print("[Error] 바코드 데이터 디코딩/저장 오류:", e)
+    def readSensorId(self, target) -> any:
+        sendBytes = b'\x03\x00\x00\x00'
 
-            # 수신 종료 및 처리
-            if finished_flag:
-                self.is_barcode_receiving = False
-                print("[Debug] barcode 데이터 저장 완료:", self.barcode_info)
-                time.sleep_ms(500)
-                try:
-                    W5500.sendMessage("sensor_ID: {}\n".format(self.sensor_ID))
-                    W5500.sendMessage("barcode_info: {}\n".format(self.barcode_info))
-                    print("[Debug] sensor_ID, barcode_info 서버로 송신 완료")
-                except Exception as e:
-                    print("[Error] sensor_ID/barcode_info 송신 실패:", e)
-                # finished 이후 남은 데이터만 버퍼에 남김
-                idx = buffer_str.find('barcode sending finished')
-                remain_str = buffer_str[idx + len('barcode sending finished'):]
-                tcp_receive_buffer = remain_str  # str 그대로 남김
+        while len(sendBytes) < (SPI_BUF_SIZE - 2):
+            sendBytes += b'\xFF'
+
+        checksum = self.getChecksum(sendBytes)
+        sendBytes += int.to_bytes(checksum, 2, 'big')
+
+        fail_cnt = 0
+        while True:
+            self.sendDataBySpi(sendBytes, target)
+            time.sleep(DELAY_SPI_TX_RX)
+
+            rxVal = self.receiveDataBySpi(SPI_BUF_SIZE, target)
+
+            if (self.getChecksum(rxVal[:-2]) == int.from_bytes(rxVal[SPI_BUF_SIZE - 2:], 'big') and
+                    rxVal[1] == 0x00):
+                sensorId_len = int.from_bytes(rxVal[2:4])
+                sensorId = rxVal[4:4+sensorId_len]
+                # print(f'Read sensor ID: {sensorId}')
+                break
             else:
-                # 아직 끝나는 플래그 없으면 버퍼를 비움 (혹은 필요시 유지)
-                tcp_receive_buffer = ""
-    """
+                fail_cnt += 1
+                if fail_cnt > SPI_TX_RETRY:
+                    print(f'MCU_{target} >> Error: Failed read sensor ID')
+                    return 'failed'
+                else:
+                    print(f'MCU_{target} >> Warning: Failed checksum, TX Retry{fail_cnt}')
 
-    def handle_read_sensor_request(self):
-        global tcp_receive_buffer
-        if "Read_Sensor" in tcp_receive_buffer:
-            idx = tcp_receive_buffer.index("Read_Sensor")
-            # "Read_Sensor"만 제거 (문자열 슬라이스)
-            tcp_receive_buffer = tcp_receive_buffer[:idx] + tcp_receive_buffer[idx + len("Read_Sensor"):]
-            self.readSensorId()
+        if int.from_bytes(sensorId, 'big') == 0:
+            return '0'
+        else:
+            return sensorId.hex().upper()
 
-            # Write protect: Disable
-            self.i2c_0.writeto(0x50, b'\xA0\x00\x06')
-            time.sleep_ms(10)  # Write cycle time: 5ms
+    def spi_chip_select(self, target, high_low):
+        if target == 1:
+            self.spi_cs_M1.value(high_low)
+        elif target == 2:
+            self.spi_cs_M2.value(high_low)
+        elif target == 3:
+            self.spi_cs_M3.value(high_low)
+        elif target == 4:
+            self.spi_cs_M4.value(high_low)
+        elif target == 5:
+            self.spi_cs_M5.value(high_low)
+        elif target == 6:
+            self.spi_cs_M6.value(high_low)
+        elif target == 7:
+            self.spi_cs_M7.value(high_low)
+        elif target == 8:
+            self.spi_cs_M8.value(high_low)
 
-            # Write data
-            self.i2c_0.writeto(0x50, b'\x7D\xE3\xAB\xAB\xCC')
-            time.sleep_ms(10)
+    def sendDataBySpi(self, data, target):
+        if DEBUG_MODE:
+            print(f'TX_{target} >> {len(data)}, {data}')
 
-            # Write protect: Enable
-            self.i2c_0.writeto(0x50, b'\xA0\x00\x0E')
-            time.sleep_ms(10)  # Write cycle time: 5ms
+        self.spi_chip_select(target, 0)
+        self.spi.write(data)
+        self.spi_chip_select(target, 1)
 
-            # Power Off
-            data = bytearray([0x00])
-            self.i2c_1.writeto_mem(0x20, 0x09, data)
+    def receiveDataBySpi(self, length, target) -> bytes:
+        self.spi_chip_select(target, 0)
+        data = self.spi.read(length)
+        self.spi_chip_select(target, 1)
 
+        if DEBUG_MODE:
+            print(f'RX_{target} >> {len(data)}, {data}')
+        return data
 
-    def readSensorId(self):
+    @staticmethod
+    def getChecksum(data):
+        checksum = 0
+        for byte in data:
+            checksum += byte
 
-        # IODIR
-        data = bytearray([0x00])
-        self.i2c_1.writeto_mem(0x20, 0x00, data)
-        # temp = self.i2c_1.readfrom_mem(0x20, 0x00, 1)
-        # print(f'IODIR: {temp}')
+        return checksum & 0xFFFF
+    # endregion
 
-        data = bytearray([0x00])
-        self.i2c_1.writeto_mem(0x21, 0x00, data)
-
-        data = bytearray([0x00])
-        self.i2c_1.writeto_mem(0x22, 0x00, data)
-
-        data = bytearray([0x00])
-        self.i2c_1.writeto_mem(0x23, 0x00, data)
-
-        # Set GPIO
-        data = bytearray([0xff])
-        self.i2c_1.writeto_mem(0x20, 0x09, data)
-        # temp = self.i2c_1.readfrom_mem(0x20, 0x09, 1)
-        # print(f'GPIO: {temp}')
-
-        data = bytearray([0x00])
-        self.i2c_1.writeto_mem(0x21, 0x09, data)
-
-        data = bytearray([0x00])
-        self.i2c_1.writeto_mem(0x22, 0x09, data)
-
-        data = bytearray([0x00])
-        self.i2c_1.writeto_mem(0x23, 0x09, data)
-
-        time.sleep_ms(10)
-        self.resetA.on()
-        time.sleep_ms(10)
-
-        # I2C Selector
-        self.i2c_0.writeto(0x71, b'\x01')
-        # temp = self.i2c_0.readfrom(0x71, 1)
-        # print(temp)
-
-        print('I2C_0 slave address:')
-        devices = self.i2c_0.scan()
-        for device in devices:
-            print(hex(device))
-
-        time.sleep_ms(10)
-        print("Start readSensorId")
-        self.i2c_0.writeto(0x10, b'\x01\x36\x13\x00')
-        self.i2c_0.writeto(0x10, b'\x01\x3E\x00\xC8')
-        self.i2c_0.writeto(0x10, b'\x03\x04\x00\x03')
-        self.i2c_0.writeto(0x10, b'\x03\x06\x01\x13')
-        self.i2c_0.writeto(0x10, b'\x03\x0C\x00\x00')
-        self.i2c_0.writeto(0x10, b'\x03\x0E\x00\x03')
-        self.i2c_0.writeto(0x10, b'\x03\x10\x01\x7C')
-        self.i2c_0.writeto(0x10, b'\x03\x12\x00\x00')
-        self.i2c_0.writeto(0x10, b'\x01\x00\x01\x00')  # streaming On
-        time.sleep_ms(20)
-        self.i2c_0.writeto(0x10, b'\x0A\x02\x00\x00')
-        self.i2c_0.writeto(0x10, b'\x0A\x00\x01\x00')
-        time.sleep_ms(10)
-        self.i2c_0.writeto(0x10, b'\x0A\x24')
-        optValue = self.i2c_0.readfrom(0x10, 6)
-        print(f'0x0A24~0x0A29: {optValue}')
-
-        optValue = int.from_bytes(optValue, 'big')
-        str_optValue = f'{optValue:048b}'
-        print(len(str_optValue), str_optValue)
-
-        lot_id1 = self.decoding(int(str_optValue[0:6], 2))
-        lot_id2 = self.decoding(int(str_optValue[6:12], 2))
-        lot_id3 = self.decoding(int(str_optValue[12:18], 2))
-        lot_id4 = self.decoding(int(str_optValue[18:24], 2))
-        wf_no = int(str_optValue[24:29], 2)
-        x_coordinate = int(str_optValue[29:37], 2)
-        y_coordinate = int(str_optValue[37:45], 2)
-        print(lot_id1, lot_id2, lot_id3, lot_id4, wf_no, x_coordinate, y_coordinate)
-
-        self.i2c_0.writeto(0x10, b'\x00\x19')
-        flag2 = self.i2c_0.readfrom(0x10, 1)
-        print(f'Flag2: {flag2}')
-
-        self.i2c_0.writeto(0x10, b'\x00\x02')
-        revisionId1 = self.i2c_0.readfrom(0x10, 1)
-        print(f'Revision_ID1: {revisionId1}')
-
-        self.i2c_0.writeto(0x10, b'\x00\x03')
-        revisionId2 = self.i2c_0.readfrom(0x10, 1)
-        print(f'Revision_ID2: {revisionId2}')
-
-        self.i2c_0.writeto(0x10, b'\x00\x0D')
-        featureId1 = self.i2c_0.readfrom(0x10, 1)
-        print(f'Feature_ID1: {featureId1}')
-
-        self.i2c_0.writeto(0x10, b'\x00\x0E')
-        featureId2 = self.i2c_0.readfrom(0x10, 1)
-        print(f'Feature_ID2: {featureId2}')
-
-        self.i2c_0.writeto(0x10, b'\x00\x00')
-        modelId1 = self.i2c_0.readfrom(0x10, 1)
-        print(f'Model_ID1: {modelId1}')
-
-        self.i2c_0.writeto(0x10, b'\x00\x01')
-        modelId2 = self.i2c_0.readfrom(0x10, 1)
-        print(f'Model_ID2: {modelId2}')
-
-        self.i2c_0.writeto(0x10, b'\x00\x16')
-        flag0 = self.i2c_0.readfrom(0x10, 1)
-        print(f'Flag0: {flag0}')
-
-        self.i2c_0.writeto(0x10, b'\x00\x18')
-        flag1 = self.i2c_0.readfrom(0x10, 1)
-        print(f'Flag1: {flag1}')
-
-        self.i2c_0.writeto(0x10, b'\x0A\x00\x00\x00')
-        print('End readSensorId')
-
-        sensorId = bytes()
-        sensorId += lot_id1.to_bytes(1, 'big')
-        sensorId += lot_id2.to_bytes(1, 'big')
-        sensorId += lot_id3.to_bytes(1, 'big')
-        sensorId += lot_id4.to_bytes(1, 'big')
-        sensorId += flag2
-        sensorId += wf_no.to_bytes(1, 'big')
-        sensorId += x_coordinate.to_bytes(1, 'big')
-        sensorId += y_coordinate.to_bytes(1, 'big')
-        sensorId += revisionId1
-        sensorId += revisionId2
-        sensorId += featureId1
-        sensorId += featureId2
-        sensorId += modelId1
-        sensorId += modelId2
-        sensorId += flag0
-        sensorId += flag1
-
-        print(f'Final sensor ID: {sensorId}')
+    @staticmethod
+    def convert_hex_as_int(s):
+        result = ''
+        i = 0
+        while i < len(s):
+            if s[i:i + 2].upper() == '0X':
+                j = i + 2
+                hex_str = ''
+                while j < len(s) and s[j].upper() in '0123456789ABCDEF':
+                    hex_str += s[j]
+                    j += 1
+                dec = str(int(hex_str, 16))
+                result += dec
+                i = j
+            else:
+                result += s[i]
+                i += 1
+        return result
 
 
 if __name__ == "__main__":
-    cnt_msec = 0
+    cnt_ms = 0
 
-    ipAddress = '192.168.1.103'
-    gateway = '192.168.1.1'
     server_ip = '192.168.1.2'
     server_port = 8000
-
     main = Main(server_ip, server_port)
 
     # 상태머신 구조
@@ -461,20 +463,23 @@ if __name__ == "__main__":
     reconnect_timer = 0
 
     while True:
-        try:
-            cnt_msec += 1
+        cnt_ms += 1
 
-            # 연결이 끊어진 경우에만 재접속 시도
+        try:
+            main.func_1ms()
+
+            # # 연결이 끊어진 경우에만 재접속 시도
             if not W5500.is_initialized:
                 conn_state = "DISCONNECTED"
                 if reconnect_timer <= 0:
                     print("[*] Trying to reconnect to server...")
                     main.try_init_tcp()
+
                     if W5500.is_initialized:
                         print("[*] Reconnected to server")
                         conn_state = 'CONNECTED'
                         reconnect_timer = 0
-                        W5500.start_ping_sender()
+                        # W5500.start_ping_sender()
                     else:
                         print("[*] Reconnect failed")
                         reconnect_timer = 3000
@@ -483,21 +488,20 @@ if __name__ == "__main__":
             else:
                 conn_state = "CONNECTED"
 
-            if not cnt_msec % 10:
-                if W5500.is_initialized :
-                    main.func_10msec()
+            if not cnt_ms % 10:
+                main.func_10ms()
 
-            if not cnt_msec % 20:
-                main.func_20msec()
+            if not cnt_ms % 20:
+                main.func_20ms()
 
-            if not cnt_msec % 50:
-                main.func_50msec()
+            if not cnt_ms % 50:
+                main.func_50ms()
 
-            if not cnt_msec % 100:
-                main.func_100msec()
+            if not cnt_ms % 100:
+                main.func_100ms()
 
-            if not cnt_msec % 500:
-                main.func_500msec()
+            if not cnt_ms % 500:
+                main.func_500ms()
 
             time.sleep_ms(1)
         except KeyboardInterrupt:
@@ -507,5 +511,5 @@ if __name__ == "__main__":
         except Exception as e:
             print("Exception in main loop", e)
             import sys
-            sys.print_exception(e)
 
+            sys.print_exception(e)
