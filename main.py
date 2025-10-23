@@ -92,30 +92,10 @@ class Main:
     def func_1ms(self):
         pass
 
-
-
     def func_10ms(self):
-        global tcp_receive_buffer, is_script_sending
+        pass
 
-        if W5500.is_initialized:
-            # 드레인 루프: 이번 틱에 도착한 모든 패킷을 비움
-            drained = 0
-            while True:
-                chunk = W5500.read_from_socket()
-                if not chunk:
-                    break
 
-                # 필요 시 REPL 출력
-                if not is_script_sending:
-                    print(f"[RX] {chunk.rstrip()}")
-
-                tcp_receive_buffer += chunk
-                drained += 1
-                if drained > 64:  # 안전장치: 한 틱당 최대 64개만 처리
-                    break
-
-            self.handle_script_receive()
-            self.handle_barcode_receive()
 
 
     # def func_10ms(self):
@@ -145,7 +125,32 @@ class Main:
         pass
 
     def func_50ms(self):
-        pass
+        global tcp_receive_buffer, is_script_sending
+
+        if W5500.is_initialized:
+            drained = 0
+            added = 0
+            while True:
+                chunk = W5500.read_from_socket()
+                if chunk:
+                    if not is_script_sending:
+                        print(f"[RX] {chunk.rstrip()}")
+                elif not chunk:
+                    break
+                tcp_receive_buffer += chunk
+                added += len(chunk)
+                drained += 1
+                if drained > 64:
+                    break
+            if added:
+                try:
+                    print("[DBG] appended {} bytes to buffer (total now ~unknown due to Python string)".format(added))
+                except Exception:
+                    pass
+
+            self.handle_script_receive()
+            self.handle_barcode_receive()
+
 
     def func_100ms(self):
         if self.isRead_sensorId:
