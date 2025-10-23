@@ -95,14 +95,10 @@ class Main:
         pass
 
     def func_10ms(self):
-        global tcp_receive_buffer, is_script_sending
-
-        if W5500.is_initialized:
-            chunk = W5500.read_from_socket()
-
-            if chunk:
-                tcp_receive_buffer += chunk  # str + str 안전하게 누적
-                print(f'[*] Received data: {chunk}')
+        chunk = W5500.read_from_socket()
+        if chunk:
+            self.udp_receive_buffer += chunk
+            print(f'[*] Received data: {chunk}')
 
             self.handle_script_receive()
             self.handle_barcode_receive()
@@ -237,13 +233,11 @@ class Main:
         그대로 self.barcode_info에 저장한다. 'barcode_info:' 프리픽스는 무시한다.
         부분 수신을 고려해 중괄호 매칭으로 완전한 딕셔너리 본문이 모일 때까지 대기.
         """
-        global tcp_receive_buffer
-
-        if not tcp_receive_buffer:
+        if not self.udp_receive_buffer:
             return
 
         prefix = 'barcode_info:'
-        buf = tcp_receive_buffer
+        buf = self.udp_receive_buffer
 
         # 프리픽스가 없으면 처리하지 않음
         if prefix not in buf:
