@@ -6,7 +6,6 @@ from collections import OrderedDict
 # 서버 메시지 수신 버퍼
 tcp_receive_buffer = ""  # 네트워크 수신 버퍼
 script_buffer = ""  # 스크립트 전체 누적 버퍼
-is_script_sending = False  # 스크립트 수신 상태 플래그
 
 FIRMWARE_VERSION = 0.2
 
@@ -52,6 +51,8 @@ class Main:
         self.gateway = '192.168.1.1'
         self.server_ip = server_ip
         self.server_port = server_port
+        self.is_script_sending = False  # 스크립트 수신 상태 플래그
+
 
         self.barcode_sendStates = {}
         self.barcode_info = {}
@@ -59,6 +60,8 @@ class Main:
         self.delay_sensorId = int()
         self.isRead_sensorId = False
         self.sensorId = {}
+        self.udp_receive_buffer = b''
+        self.script_buffer = b''
 
         self.gpioIn_ipSel1 = Pin(8, Pin.IN)
         self.gpioIn_ipSel2 = Pin(9, Pin.IN)
@@ -66,14 +69,19 @@ class Main:
         self.gpioIn_ipSel4 = Pin(15, Pin.IN)
 
         self.ipAddress = ''
+        self.portNumber = None
         if self.gpioIn_ipSel1.value() == 1 and self.gpioIn_ipSel2.value() == 1 and self.gpioIn_ipSel3.value() == 1:
             self.ipAddress = '192.168.1.101'
+            self.portNumber = 8001
         elif self.gpioIn_ipSel1.value() == 1 and self.gpioIn_ipSel2.value() == 1 and self.gpioIn_ipSel3.value() == 0:
             self.ipAddress = '192.168.1.102'
+            self.portNumber = 8002
         elif self.gpioIn_ipSel1.value() == 1 and self.gpioIn_ipSel2.value() == 0 and self.gpioIn_ipSel3.value() == 1:
             self.ipAddress = '192.168.1.103'
+            self.portNumber = 8003
         elif self.gpioIn_ipSel1.value() == 0 and self.gpioIn_ipSel2.value() == 1 and self.gpioIn_ipSel3.value() == 1:
             self.ipAddress = '192.168.1.104'
+            self.portNumber = 8004
         # endregion
 
         self.try_init_udp()
@@ -94,6 +102,7 @@ class Main:
 
             if chunk:
                 tcp_receive_buffer += chunk  # str + str 안전하게 누적
+                print(f'[*] Received data: {chunk}')
 
             self.handle_script_receive()
             self.handle_barcode_receive()
@@ -133,6 +142,7 @@ class Main:
     def try_init_udp(self):
         try:
             W5500.init(ipAddress=self.ipAddress,
+                       portNumber=self.portNumber,
                        gateway=self.gateway,
                        server_ip=self.server_ip,
                        server_port=self.server_port)
@@ -140,49 +150,86 @@ class Main:
             print(f"[-] UDP Initialization Error: {str(e)}")
     # endregion
 
+
     @staticmethod
     def save_to_script_file(data):
-        """
-        서버로부터 청크 데이터를 받아 script.txt 파일에 저장
-        """
-        print(f"[REPL] {data}")
         try:
-            # 파일 저장 시 반드시 bytes로 변환
+            # 아래처럼 안전하게 출력!
+            print("[REPL]", repr(data[:64]), "...")
             with open("script.txt", "wb") as f:
-                f.write(data.encode('utf-8'))
+                f.write(data)
             print("[Debug] script.txt에 데이터 저장 완료")
         except Exception as e:
             print(f"[Error] script.txt 파일 저장 중 오류 발생: {e}")
 
+
+    # @staticmethod
+    # def save_to_script_file(data):
+    #     """
+    #     서버로부터 청크 데이터를 받아 script.txt 파일에 저장
+    #     """
+    #     print(f"[REPL] {data}")
+    #     try:
+    #         # 파일 저장 시 반드시 bytes로 변환
+    #         with open("script.txt", "wb") as f:
+    #             f.write(data.encode('utf-8'))
+    #         print("[Debug] script.txt에 데이터 저장 완료")
+    #     except Exception as e:
+    #         print(f"[Error] script.txt 파일 저장 중 오류 발생: {e}")
+
     def handle_script_receive(self):
-        global tcp_receive_buffer, is_script_sending, mcu_script_status
-
-        # Script send 신호 감지 및 스크립트 수신 시작
-        if not is_script_sending and "Script send" in tcp_receive_buffer:
-            idx = tcp_receive_buffer.index("Script send")
-            tcp_receive_buffer = tcp_receive_buffer[idx + len("Script send"):]
-            is_script_sending = True
+        # 반드시 bytes로 비교!
+        if not self.is_script_sending and b"Script send" in self.udp_receive_buffer:
+            idx = self.udp_receive_buffer.index(b"Script send")
+            self.udp_receive_buffer = self.udp_receive_buffer[idx + len(b"Script send"):]
+            self.is_script_sending = True
+            self.script_buffer = b''
+            print("[Debug] Script send 감지, 수신 시작")
             return
 
-        # 스크립트 수신 종료(EOF) 감지 및 저장
-        if is_script_sending and "EOF" in tcp_receive_buffer:
-            idx = tcp_receive_buffer.index("EOF")
-            script_buffer = tcp_receive_buffer[:idx]
-            tcp_receive_buffer = tcp_receive_buffer[idx + len("EOF"):]
-            print("[Debug] Script 수신 완료 - 파일로 저장")
-            self.save_to_script_file(script_buffer)
-            is_script_sending = False
+        if self.is_script_sending:
+            if b"EOF" in self.udp_receive_buffer:
+                idx = self.udp_receive_buffer.index(b"EOF")
+                chunk_data = self.udp_receive_buffer[:idx]
+                self.script_buffer += chunk_data
+                print("[Debug] Script 수신 완료 - 파일로 저장")
+                self.save_to_script_file(self.script_buffer)
+                self.is_script_sending = False
+                self.udp_receive_buffer = self.udp_receive_buffer[idx + len(b"EOF"):]
+            else:
+                self.script_buffer += self.udp_receive_buffer
+                self.udp_receive_buffer = b''
 
-            start_time = time.ticks_ms()
-            for i in range(8):
-                ret = self.sendScript(i + 1)
-                msg = f"Script save {ret}: MCU{i + 1}\n"
-                W5500.sendMessage(msg)
-            end_time = time.ticks_ms()
-            print(f'Elapsed time: {time.ticks_diff(end_time, start_time) / 1000}ms')
-        else:
-            # EOF가 없으면 버퍼를 비우지 않고 계속 누적만 함
-            return
+
+    # def handle_script_receive(self):
+    #     global tcp_receive_buffer, is_script_sending, mcu_script_status
+    #
+    #     # Script send 신호 감지 및 스크립트 수신 시작
+    #     if not is_script_sending and "Script send" in tcp_receive_buffer:
+    #         idx = tcp_receive_buffer.index("Script send")
+    #         tcp_receive_buffer = tcp_receive_buffer[idx + len("Script send"):]
+    #         is_script_sending = True
+    #         return
+    #
+    #     # 스크립트 수신 종료(EOF) 감지 및 저장
+    #     if is_script_sending and "EOF" in tcp_receive_buffer:
+    #         idx = tcp_receive_buffer.index("EOF")
+    #         script_buffer = tcp_receive_buffer[:idx]
+    #         tcp_receive_buffer = tcp_receive_buffer[idx + len("EOF"):]
+    #         print("[Debug] Script 수신 완료 - 파일로 저장")
+    #         self.save_to_script_file(script_buffer)
+    #         is_script_sending = False
+    #
+    #         start_time = time.ticks_ms()
+    #         for i in range(8):
+    #             ret = self.sendScript(i + 1)
+    #             msg = f"Script save {ret}: MCU{i + 1}\n"
+    #             W5500.sendMessage(msg)
+    #         end_time = time.ticks_ms()
+    #         print(f'Elapsed time: {time.ticks_diff(end_time, start_time) / 1000}ms')
+    #     else:
+    #         # EOF가 없으면 버퍼를 비우지 않고 계속 누적만 함
+    #         return
 
     def handle_barcode_receive(self):
         """
