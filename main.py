@@ -236,7 +236,7 @@ class Main:
         if not self.udp_receive_buffer:
             return
 
-        prefix = 'barcode_info:'
+        prefix = b'barcode_info:'
         buf = self.udp_receive_buffer
 
         # 프리픽스가 없으면 처리하지 않음
@@ -247,8 +247,15 @@ class Main:
         prefix_idx = buf.find(prefix)
         after = buf[prefix_idx + len(prefix):]
 
+        # 바이트 스트림을 문자열로 디코드
+        try:
+            after_str = after.decode('utf-8', errors='replace')
+        except Exception as e:
+            print("[Error] barcode_info decode 실패:", e)
+            return
+
         # 딕셔너리 시작 '{' 탐색
-        lbrace_idx = after.find('{')
+        lbrace_idx = after_str.find('{')
         if lbrace_idx == -1:
             # 아직 본문 시작이 오지 않음
             return
@@ -256,7 +263,7 @@ class Main:
         # 중괄호 레벨 카운팅으로 끝 위치 탐색
         depth = 0
         end_rel_idx = -1
-        for i, ch in enumerate(after[lbrace_idx:], start=lbrace_idx):
+        for i, ch in enumerate(after_str[lbrace_idx:], start=lbrace_idx):
             if ch == '{':
                 depth += 1
             elif ch == '}':
@@ -269,20 +276,20 @@ class Main:
             # 아직 전체 딕셔너리가 수신되지 않음
             return
 
-        dict_str = after[lbrace_idx:end_rel_idx + 1]
+        dict_str = after_str[lbrace_idx:end_rel_idx + 1]
 
         # 파싱 시도: JSON 우선, 실패 시 literal_eval 폴백
         parsed = None
         try:
             try:
                 import ujson as json
-            except:
-                import json  # type: ignore
+            except ImportError:
+                import json
             json_str = dict_str.replace("'", '"')
             parsed = json.loads(json_str)
         except Exception as e:
             try:
-                import ast  # type: ignore
+                import ast
                 parsed = ast.literal_eval(dict_str)
             except Exception as e2:
                 print("[Error] barcode_info 파싱 실패:", e, e2)
@@ -304,14 +311,96 @@ class Main:
         self.isRead_sensorId = True
 
         # 소비한 데이터 제거 (+ 선택적으로 종료 토큰 제거)
-        consumed_end = prefix_idx + len(prefix) + end_rel_idx + 1
-        remainder = buf[consumed_end:]
-        finish_token = 'barcode sending finished'
-        if finish_token in remainder:
-            remainder = remainder.replace(finish_token, '')
-        tcp_receive_buffer = remainder
-        # self.is_barcode_receiving = False
-    # endregion
+        consumed_end = prefix_idx + len(prefix) + len(after_str.encode('utf-8')[:end_rel_idx + 1])
+        self.udp_receive_buffer = buf[consumed_end:]
+
+
+
+    # def handle_barcode_receive(self):
+    #     """
+    #     서버로부터 'barcode_info: { ... }' 형태의 딕셔너리 문자열을 수신해
+    #     그대로 self.barcode_info에 저장한다. 'barcode_info:' 프리픽스는 무시한다.
+    #     부분 수신을 고려해 중괄호 매칭으로 완전한 딕셔너리 본문이 모일 때까지 대기.
+    #     """
+    #     if not self.udp_receive_buffer:
+    #         return
+    #
+    #     prefix = 'barcode_info:'
+    #     buf = self.udp_receive_buffer
+    #
+    #     # 프리픽스가 없으면 처리하지 않음
+    #     if prefix not in buf:
+    #         return
+    #
+    #     # 프리픽스 이후의 본문에서 딕셔너리 추출
+    #     prefix_idx = buf.find(prefix)
+    #     after = buf[prefix_idx + len(prefix):]
+    #
+    #     # 딕셔너리 시작 '{' 탐색
+    #     lbrace_idx = after.find('{')
+    #     if lbrace_idx == -1:
+    #         # 아직 본문 시작이 오지 않음
+    #         return
+    #
+    #     # 중괄호 레벨 카운팅으로 끝 위치 탐색
+    #     depth = 0
+    #     end_rel_idx = -1
+    #     for i, ch in enumerate(after[lbrace_idx:], start=lbrace_idx):
+    #         if ch == '{':
+    #             depth += 1
+    #         elif ch == '}':
+    #             depth -= 1
+    #             if depth == 0:
+    #                 end_rel_idx = i
+    #                 break
+    #
+    #     if end_rel_idx == -1:
+    #         # 아직 전체 딕셔너리가 수신되지 않음
+    #         return
+    #
+    #     dict_str = after[lbrace_idx:end_rel_idx + 1]
+    #
+    #     # 파싱 시도: JSON 우선, 실패 시 literal_eval 폴백
+    #     parsed = None
+    #     try:
+    #         try:
+    #             import ujson as json
+    #         except:
+    #             import json  # type: ignore
+    #         json_str = dict_str.replace("'", '"')
+    #         parsed = json.loads(json_str)
+    #     except Exception as e:
+    #         try:
+    #             import ast  # type: ignore
+    #             parsed = ast.literal_eval(dict_str)
+    #         except Exception as e2:
+    #             print("[Error] barcode_info 파싱 실패:", e, e2)
+    #             return
+    #
+    #     if not isinstance(parsed, dict):
+    #         print("[Error] barcode_info 형식 오류: dict 아님 ->", type(parsed))
+    #         return
+    #
+    #     self.barcode_info = parsed
+    #     print("[Debug] barcode_info dict 저장 완료:", self.barcode_info)
+    #
+    #     self.barcode_sendStates = dict()
+    #     for key, value in self.barcode_info.items():
+    #         ret = self.sendBarcode(int(key[-1]), value)
+    #         self.barcode_sendStates[key] = ret
+    #
+    #     time.sleep((self.delay_sensorId + 100) / 1000)
+    #     self.isRead_sensorId = True
+    #
+    #     # 소비한 데이터 제거 (+ 선택적으로 종료 토큰 제거)
+    #     consumed_end = prefix_idx + len(prefix) + end_rel_idx + 1
+    #     remainder = buf[consumed_end:]
+    #     finish_token = 'barcode sending finished'
+    #     if finish_token in remainder:
+    #         remainder = remainder.replace(finish_token, '')
+    #     tcp_receive_buffer = remainder
+    #     # self.is_barcode_receiving = False
+    # # endregion
 
     # region About MCU
     def sendScript(self, target) -> str:
