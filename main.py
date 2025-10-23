@@ -1,6 +1,6 @@
 from machine import Pin, SPI
 import time
-import W5500_EVB_PICO as W5500
+import W5500_EVB_PICO_UDP as W5500
 from collections import OrderedDict
 
 # 서버 메시지 수신 버퍼
@@ -45,7 +45,7 @@ class Main:
         self.writeCard_sel4 = Pin(15, Pin.IN)
         # endregion
 
-        # region TCP/IP
+        # region UDP/IP
         self.is_script_sending = False  # 스크립트 저장 상태
         self.script_file_name = "script.txt"
         # self.ipAddress = '192.168.1.104'
@@ -75,6 +75,8 @@ class Main:
         elif self.gpioIn_ipSel1.value() == 0 and self.gpioIn_ipSel2.value() == 1 and self.gpioIn_ipSel3.value() == 1:
             self.ipAddress = '192.168.1.104'
         # endregion
+
+        self.try_init_udp()
 
         # self.sendScript(5)
         # barcode = 'C9051A569000H5'
@@ -127,15 +129,16 @@ class Main:
         self.sysLed_pico(not self.sysLed_pico.value())
     # endregion
 
-    # region About TCP/IP
-    def try_init_tcp(self):
+    # region About UDP/IP
+    def try_init_udp(self):
         try:
             W5500.init(ipAddress=self.ipAddress,
                        gateway=self.gateway,
                        server_ip=self.server_ip,
                        server_port=self.server_port)
         except Exception as e:
-            print(f"[-] Initialization Error: {str(e)}")
+            print(f"[-] UDP Initialization Error: {str(e)}")
+    # endregion
 
     @staticmethod
     def save_to_script_file(data):
@@ -468,25 +471,24 @@ if __name__ == "__main__":
         try:
             main.func_1ms()
 
-            # # 연결이 끊어진 경우에만 재접속 시도
-            if not W5500.is_initialized:
-                conn_state = "DISCONNECTED"
-                if reconnect_timer <= 0:
-                    print("[*] Trying to reconnect to server...")
-                    main.try_init_tcp()
-
-                    if W5500.is_initialized:
-                        print("[*] Reconnected to server")
-                        conn_state = 'CONNECTED'
-                        reconnect_timer = 0
-                        # W5500.start_ping_sender()
-                    else:
-                        print("[*] Reconnect failed")
-                        reconnect_timer = 3000
-                else:
-                    reconnect_timer -= 1
-            else:
-                conn_state = "CONNECTED"
+            # UDP는 연결 개념이 약하므로, 소켓 준비 상태 기준으로 재초기화 시도
+            # if not W5500.is_initialized:
+            #     conn_state = "DISCONNECTED"
+            #     if reconnect_timer <= 0:
+            #         print("[*] Trying to (re)initialize UDP socket...")
+            #         main.try_init_udp()
+            #
+            #         if W5500.is_initialized:
+            #             print("[*] UDP socket ready")
+            #             conn_state = 'CONNECTED'
+            #             reconnect_timer = 0
+            #         else:
+            #             print("[*] UDP init failed")
+            #             reconnect_timer = 3000
+            #     else:
+            #         reconnect_timer -= 1
+            # else:
+            #     conn_state = "CONNECTED"
 
             if not cnt_ms % 10:
                 main.func_10ms()
@@ -505,7 +507,7 @@ if __name__ == "__main__":
 
             time.sleep_ms(1)
         except KeyboardInterrupt:
-            print("KeyboardInterrupt: cleaning up TCP...")
+            print("KeyboardInterrupt: cleaning up UDP...")
             W5500.close_connection()
             break
         except Exception as e:
