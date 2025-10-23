@@ -13,7 +13,7 @@ _socket_lock = _thread.allocate_lock()
 _remote_addr = None  # (server_ip, server_port)
 
 
-def init(ipAddress: str, gateway: str, server_ip: str, server_port: int) -> None:
+def init(ipAddress: str, portNumber: int, gateway: str, server_ip: str, server_port: int) -> None:
     """
     UDP 초기화:
     - WIZNET5K 활성화
@@ -45,10 +45,13 @@ def init(ipAddress: str, gateway: str, server_ip: str, server_port: int) -> None
         # UDP 소켓 생성 및 논블로킹
         udpSocket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udpSocket.setblocking(False)
+        udpSocket.bind((ipAddress, portNumber))
+        print(f"[*] UDP binded({ipAddress}, {portNumber})")
 
         # 선택: UDP connect (환경에 따라 실패 가능, 실패해도 sendto/recvfrom로 동작)
         try:
             udpSocket.connect(_remote_addr)
+            print('Connected to server')
         except Exception as e:
             print(f"[Warn] UDP connect not applied: {e}")
 
@@ -66,12 +69,13 @@ def init(ipAddress: str, gateway: str, server_ip: str, server_port: int) -> None
         udpSocket = None
 
 
+
+
 def read_from_socket():
     """
     논블로킹 수신:
     - 수신 데이터 없으면 None
-    - 수신 시 UTF-8 디코딩 문자열 반환
-    - 서버가 아닌 발신자는 무시
+    - 수신 시 bytes 반환 (디코딩하지 않음)
     """
     global udpSocket, is_initialized, _remote_addr
     if udpSocket is None:
@@ -87,22 +91,15 @@ def read_from_socket():
             addr_ok = (_remote_addr is None) or (addr == _remote_addr)
 
         if not data:
-            # UDP는 연결 종료 개념이 없음. 빈 데이터는 무시.
             return None
 
         if not addr_ok:
-            # 지정 서버가 아니면 무시
             return None
 
-        try:
-            decoded_data = data.decode('utf-8')
-        except Exception as e:
-            print(f"[Error] UDP data decode failed: {e}. Raw data: {data}")
-            decoded_data = ""
-        return decoded_data
+        # **디코딩하지 않고 bytes 그대로 반환**
+        return data
 
     except OSError as e:
-        # 데이터 없음(논블로킹)
         if hasattr(e, 'errno') and e.errno == 11:
             return None
         print(f"[Error] UDP recv failed: {e}")
@@ -122,6 +119,65 @@ def read_from_socket():
             pass
         udpSocket = None
         return None
+
+
+
+# def read_from_socket():
+#     """
+#     논블로킹 수신:
+#     - 수신 데이터 없으면 None
+#     - 수신 시 UTF-8 디코딩 문자열 반환
+#     - 서버가 아닌 발신자는 무시
+#     """
+#     global udpSocket, is_initialized, _remote_addr
+#     if udpSocket is None:
+#         is_initialized = False
+#         return None
+#     try:
+#         # connect가 되어 있으면 recv 사용 가능
+#         try:
+#             data = udpSocket.recv(2048)
+#             addr_ok = True
+#         except Exception:
+#             data, addr = udpSocket.recvfrom(2048)
+#             addr_ok = (_remote_addr is None) or (addr == _remote_addr)
+#
+#         if not data:
+#             # UDP는 연결 종료 개념이 없음. 빈 데이터는 무시.
+#             return None
+#
+#         if not addr_ok:
+#             # 지정 서버가 아니면 무시
+#             return None
+#
+#         try:
+#             decoded_data = data.decode('utf-8')
+#         except Exception as e:
+#             print(f"[Error] UDP data decode failed: {e}. Raw data: {data}")
+#             decoded_data = ""
+#         return decoded_data
+#
+#     except OSError as e:
+#         # 데이터 없음(논블로킹)
+#         if hasattr(e, 'errno') and e.errno == 11:
+#             return None
+#         print(f"[Error] UDP recv failed: {e}")
+#         is_initialized = False
+#         try:
+#             udpSocket.close()
+#         except Exception:
+#             pass
+#         udpSocket = None
+#         return None
+#     except Exception as e:
+#         print(f"[Error] UDP recv failed: {e}")
+#         is_initialized = False
+#         try:
+#             udpSocket.close()
+#         except Exception:
+#             pass
+#         udpSocket = None
+#         return None
 
 
 def sendMessage(msg: str) -> None:
