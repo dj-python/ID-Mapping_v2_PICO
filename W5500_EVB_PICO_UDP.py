@@ -65,8 +65,6 @@ def init(ipAddress: str, portNumber: int, gateway: str, server_ip: str, server_p
 
             print(f"[*] Ready for UDP peer: {server_ip} : {server_port}")
 
-
-
         except Exception as e:
             print(f"[-] Unexpected Error: {e}")
             is_initialized = False
@@ -92,27 +90,32 @@ def read_from_socket():
     - 같은 서버 IP에서 오는 패킷은 소스 포트가 달라도 수용합니다.
     - 'Script send'를 수신하면 해당 (IP, 포트)로 피어 주소를 갱신합니다.
     - 디코딩 오류 시 데이터 유실을 막기 위해 errors='replace'를 위치 인자로 사용.
-    - 단일 패킷으로 온 대용량 스크립트를 수신할 수 있도록 RECV_BUFSIZE(65507) 사용.
+    - 주의: W5500의 소켓 RX 메모리 한계를 넘는 단일 UDP 패킷은 수신되지 않습니다.
     """
     global tcpSocket, is_initialized, _server_addr
     if tcpSocket is None:
         is_initialized = False
         return None
     try:
-        data, addr = tcpSocket.recvfrom(RECV_BUFSIZE)
+        data, addr = tcpSocket.recvfrom(2048)
+        if data:
+            print(data)
         if not data:
             return None
+
+        # 디버깅: 실제 들어온 datagram 크기와 송신자 확인
+        try:
+            print("[DBG] UDP RX from {}:{} len={}".format(addr[0], addr[1], len(data)))
+        except Exception:
+            pass
 
         # peer 학습/검증: IP 기준으로만 제한 (포트 변화 허용)
         if _server_addr is None:
             _server_addr = addr  # 최초 수신자로 설정
         else:
-            # IP가 다른 경우에만 무시
             if addr[0] != _server_addr[0]:
-                # print(f"[*] Ignored packet from unexpected peer {addr}")
                 return None
 
-        # 안전 디코딩: MicroPython은 키워드 인자 미지원일 수 있으므로 위치 인자 사용
         decoded_data = data.decode('utf-8', 'replace')
 
         # 'Script send' 수신 시 포트까지 업데이트(서버가 이후 같은 소켓을 사용할 때 추적)
@@ -121,7 +124,6 @@ def read_from_socket():
 
         return decoded_data
     except OSError as e:
-        # 데이터 없음(논블로킹)일 때 연결 유지
         if hasattr(e, 'errno') and e.errno == 11:
             return None
         print(f"[Error] socket recv failed: {e}")
