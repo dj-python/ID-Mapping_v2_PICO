@@ -14,8 +14,6 @@ _ping_thread_running = False            # ping 송신 스레드 상태 플래그
 _ping_thread = None
 _socket_lock = _thread.allocate_lock()
 
-VERBOSE = False
-
 # UDP에서는 원격 서버 주소를 명시적으로 관리
 _server_addr = None  # tuple[str, int] 형태로 (server_ip, server_port) 저장
 
@@ -103,11 +101,10 @@ def read_from_socket():
             return None
 
         # 디버깅: 실제 들어온 datagram 크기와 송신자 확인
-        if VERBOSE:
-            try:
-                print("[DBG] UDP RX from {}:{} len={}".format(addr[0], addr[1], len(data)))
-            except Exception:
-                pass
+        try:
+            print("[DBG] UDP RX from {}:{} len={}".format(addr[0], addr[1], len(data)))
+        except Exception:
+            pass
 
         # peer 학습/검증: IP 기준으로만 제한 (포트 변화 허용)
         if _server_addr is None:
@@ -144,33 +141,15 @@ def read_from_socket():
         tcpSocket = None
         return None
 
-
+# 서버로 메시지 전송
 def sendMessage(msg: str) -> None:
     global tcpSocket, is_initialized, _server_addr
     try:
         if not is_initialized or tcpSocket is None or _server_addr is None:
-            if VERBOSE:
-                print("[클라이언트] sendMessage: Not initialized, message not sent.")
+            print("[클라이언트] sendMessage: Not initialized, message not sent.")
             return
         tcpSocket.sendto(msg.encode('utf-8'), _server_addr)
-        if VERBOSE:
-            # 본문을 그대로 찍지 않거나, 짧게 한 줄만
-            print("[*] Message sent")
-    except OSError as e:
-        # EAGAIN(11) 등 일시적 오류는 소켓을 닫지 않고 무시
-        if hasattr(e, 'errno') and e.errno == 11:
-            if VERBOSE:
-                print("[-] send EAGAIN: skip this tick")
-            return
-        # 그 외에만 소켓 리셋
-        print(f"[-] send Error: {str(e)}")
-        is_initialized = False
-        if tcpSocket:
-            try:
-                tcpSocket.close()
-            except:
-                pass
-            tcpSocket = None
+        print(f"[*] Message sent: {msg}")
     except Exception as e:
         print(f"[-] send Error: {str(e)}")
         is_initialized = False
@@ -180,26 +159,6 @@ def sendMessage(msg: str) -> None:
             except:
                 pass
             tcpSocket = None
-
-
-# 서버로 메시지 전송
-# def sendMessage(msg: str) -> None:
-#     global tcpSocket, is_initialized, _server_addr
-#     try:
-#         if not is_initialized or tcpSocket is None or _server_addr is None:
-#             print("[클라이언트] sendMessage: Not initialized, message not sent.")
-#             return
-#         tcpSocket.sendto(msg.encode('utf-8'), _server_addr)
-#         print(f"[*] Message sent: {msg}")
-#     except Exception as e:
-#         print(f"[-] send Error: {str(e)}")
-#         is_initialized = False
-#         if tcpSocket:
-#             try:
-#                 tcpSocket.close()
-#             except:
-#                 pass
-#             tcpSocket = None
 
 def close_connection():
     global tcpSocket, is_initialized, _ping_thread_running, _server_addr
