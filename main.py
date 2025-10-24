@@ -135,7 +135,7 @@ class Main:
             while True:
                 chunk = W5500.read_from_socket()
                 if chunk:
-                    if not is_script_sending:
+                    if DEBUG_MODE and not is_script_sending:
                         print(f"[RX] {chunk.rstrip()}")
                 elif not chunk:
                     break
@@ -144,11 +144,12 @@ class Main:
                 drained += 1
                 if drained > 64:
                     break
-            if added:
+            if DEBUG_MODE and added:
                 try:
-                    print("[DBG] appended {} bytes to buffer (total now ~unknown due to Python string)".format(added))
+                    print("[DBG] appended {} bytes to buffer".format(added))
                 except Exception:
                     pass
+
             self.handle_ping()
             self.handle_script_receive()
             self.handle_barcode_receive()
@@ -198,8 +199,6 @@ class Main:
         except Exception as e:
             print(f"[-] Initialization Error: {str(e)}")
 
-
-
     def handle_ping(self):
         """
         서버로부터 'ping' (개행 단위) 메시지를 받으면 'pong'으로 회신.
@@ -221,7 +220,6 @@ class Main:
             if line.strip().lower() == 'ping':
                 try:
                     W5500.sendMessage('pong\n')
-                    print('pong')
                 except Exception as e:
                     print("[Error] failed to send pong:", e)
                 responded = True
