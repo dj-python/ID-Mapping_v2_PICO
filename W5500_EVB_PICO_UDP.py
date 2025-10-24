@@ -38,7 +38,7 @@ def init(ipAddress: str, portNumber: int, gateway: str, server_ip: str, server_p
         eth.active(True)
 
         # 네트워크 설정 (원본 코드 순서 유지)
-        eth.ifconfig((ipAddress, '255.255.255.0', '8.8.8.8', gateway))
+        eth.ifconfig((ipAddress, '255.255.255.0', gateway, '8.8.8.8'))
         print("[*] Network Config:", eth.ifconfig())
         print(f"[*] Preparing UDP to... {server_ip}:{server_port}")
 
@@ -80,9 +80,6 @@ def init(ipAddress: str, portNumber: int, gateway: str, server_ip: str, server_p
             if tcpSocket: tcpSocket.close()
         except: pass
         tcpSocket = None    # 소켓 초기화
-
-
-
 
 def read_from_socket():
     """
@@ -143,115 +140,6 @@ def read_from_socket():
             pass
         tcpSocket = None
         return None
-
-
-
-# def read_from_socket():
-#     """
-#     논블로킹 수신.
-#     - 같은 서버 IP에서 오는 패킷은 소스 포트가 달라도 수용합니다.
-#     - 'Script send'를 수신하면 해당 (IP, 포트)로 피어 주소를 갱신합니다.
-#     - 디코딩 오류 시 데이터 유실을 막기 위해 errors='replace'를 위치 인자로 사용.
-#     """
-#     global tcpSocket, is_initialized, _server_addr
-#     if tcpSocket is None:
-#         is_initialized = False
-#         return None
-#     try:
-#         data, addr = tcpSocket.recvfrom(2048)
-#         if not data:
-#             return None
-#
-#         # peer 학습/검증: IP 기준으로만 제한 (포트 변화 허용)
-#         if _server_addr is None:
-#             _server_addr = addr  # 최초 수신자로 설정
-#         else:
-#             # IP가 다른 경우에만 무시
-#             if addr[0] != _server_addr[0]:
-#                 # 디버깅 필요 시 활성화
-#                 # print(f"[*] Ignored packet from unexpected peer {addr}")
-#                 return None
-#
-#         # 안전 디코딩: MicroPython은 키워드 인자 미지원일 수 있으므로 위치 인자 사용
-#         decoded_data = data.decode('utf-8', 'replace')
-#
-#         # 'Script send' 수신 시 포트까지 업데이트(서버가 이후 같은 소켓을 사용할 때 추적)
-#         if "Script send" in decoded_data and addr[0] == _server_addr[0]:
-#             _server_addr = addr
-#
-#         return decoded_data
-#     except OSError as e:
-#         # 데이터 없음(논블로킹)일 때 연결 유지
-#         if hasattr(e, 'errno') and e.errno == 11:
-#             return None
-#         print(f"[Error] socket recv failed: {e}")
-#         is_initialized = False
-#         try:
-#             tcpSocket.close()
-#         except Exception:
-#             pass
-#         tcpSocket = None
-#         return None
-#     except Exception as e:
-#         print(f"[Error] socket recv failed: {e}")
-#         is_initialized = False
-#         try:
-#             tcpSocket.close()
-#         except Exception:
-#             pass
-#         tcpSocket = None
-#         return None
-
-
-
-
-
-#
-# def read_from_socket():
-#     global tcpSocket, is_initialized, _server_addr
-#     if tcpSocket is None:
-#         is_initialized = False
-#         return None
-#     try:
-#         # UDP는 송신자 주소도 함께 수신
-#         data, addr = tcpSocket.recvfrom(1024)
-#         if not data:
-#             # UDP에서 0바이트는 연결 종료 신호가 아님 -> 무시
-#             return None
-#
-#         # 예상 외 피어의 패킷은 무시 (필요 시 주석 처리 가능)
-#         if _server_addr and addr != _server_addr:
-#             # print(f"[*] Ignored packet from unexpected peer {addr}")
-#             return None
-#
-#         try:
-#             decoded_data = data.decode('utf-8')
-#         except Exception as e:
-#             print(f"[Error] Data decode failed: {e}. Raw data: {data}")
-#             decoded_data = ""
-#         return decoded_data
-#     except OSError as e:
-#         # 데이터 없음(논블로킹)일 때 연결 유지
-#         if hasattr(e, 'errno') and e.errno == 11:
-#             return None
-#         print(f"[Error] socket recv failed: {e}")
-#         is_initialized = False
-#         try:
-#             tcpSocket.close()
-#         except Exception:
-#             pass
-#         tcpSocket = None
-#         return None
-#     except Exception as e:
-#         print(f"[Error] socket recv failed: {e}")
-#         is_initialized = False
-#         try:
-#             tcpSocket.close()
-#         except Exception:
-#             pass
-#         tcpSocket = None
-#         return None
-
 
 # 서버로 메시지 전송
 def sendMessage(msg: str) -> None:
