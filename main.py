@@ -149,7 +149,7 @@ class Main:
                     print("[DBG] appended {} bytes to buffer (total now ~unknown due to Python string)".format(added))
                 except Exception:
                     pass
-
+            self.handle_ping()
             self.handle_script_receive()
             self.handle_barcode_receive()
 
@@ -197,6 +197,48 @@ class Main:
                        server_port=self.server_port)
         except Exception as e:
             print(f"[-] Initialization Error: {str(e)}")
+
+
+
+    def handle_ping(self):
+        """
+        서버로부터 'ping' (개행 단위) 메시지를 받으면 'pong'으로 회신.
+        - 다른 프로토콜 라인은 그대로 버퍼에 되돌려 후속 핸들러가 처리하도록 함.
+        - 대소문자 무시, 공백 제거 후 비교.
+        """
+        global tcp_receive_buffer
+        if not tcp_receive_buffer:
+            return
+
+        orig_buf = tcp_receive_buffer
+        keep_lines = []
+        responded = False
+
+        while True:
+            line = _pop_line_from_buffer()
+            if line is None:
+                break
+            if line.strip().lower() == 'ping':
+                try:
+                    W5500.sendMessage('pong\n')
+                    print('pong')
+                except Exception as e:
+                    print("[Error] failed to send pong:", e)
+                responded = True
+            else:
+                keep_lines.append(line)
+
+        # 남은 조각(개행 없는 마지막 부분)
+        remainder = tcp_receive_buffer
+
+        # ping을 하나라도 처리했다면, 남은 라인들을 원래 순서로 복원
+        if responded:
+            rebuilt = ''
+            if keep_lines:
+                rebuilt = '\n'.join(keep_lines)
+                if remainder or orig_buf.endswith('\n'):
+                    rebuilt += '\n'
+            tcp_receive_buffer = rebuilt + remainder
 
     @staticmethod
     def save_to_script_file_bytes(data: bytes):
