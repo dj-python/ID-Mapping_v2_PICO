@@ -8,14 +8,14 @@ tcp_receive_buffer = ""  # 네트워크 수신 버퍼
 script_buffer = ""  # 스크립트 전체 누적 버퍼
 is_script_sending = False  # 스크립트 수신 상태 플래그
 
-FIRMWARE_VERSION = 0.2
+FIRMWARE_VERSION = 0.3
 
 SPI_SPEED = 12_000_000
 SPI_BUF_SIZE = 32
 DELAY_SPI_TX_RX = 0.000_01
 SPI_TX_RETRY = 0
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 
 class Error:
     ERR_CURRENT     = 'ERR_CURRENT'
@@ -153,32 +153,6 @@ class Main:
             self.handle_script_receive()
             self.handle_barcode_receive()
 
-
-
-
-    # def func_10ms(self):
-    #     global tcp_receive_buffer, is_script_sending
-    #
-    #     if W5500.is_initialized:
-    #         chunk = W5500.read_from_socket()
-    #
-    #         if chunk:
-    #             if not is_script_sending:
-    #                 print(f"[RX] {chunk.rstrip()}")
-    #
-    #             tcp_receive_buffer += chunk
-    #     #
-    #     #
-    #     # if W5500.is_initialized:
-    #     #     chunk = W5500.read_from_socket()
-    #     #
-    #     #     if chunk:
-    #     #         tcp_receive_buffer += chunk  # str + str 안전하게 누적
-    #
-    #         self.handle_script_receive()
-    #         self.handle_barcode_receive()
-
-
     def func_20ms(self):
         pass
 
@@ -232,22 +206,6 @@ class Main:
             print("[Debug] script.txt 저장 완료 ({} bytes)".format(len(data)))
         except Exception as e:
             print(f"[Error] script.txt 저장 오류: {e}")
-
-
-    # @staticmethod
-    # def save_to_script_file(data):
-    #     """
-    #     서버로부터 청크 데이터를 받아 script.txt 파일에 저장
-    #     """
-    #     print(f"[REPL] {data}")
-    #     try:
-    #         # 파일 저장 시 반드시 bytes로 변환
-    #         with open("script.txt", "wb") as f:
-    #             f.write(data.encode('utf-8'))
-    #         print("[Debug] script.txt에 데이터 저장 완료")
-    #     except Exception as e:
-    #         print(f"[Error] script.txt 파일 저장 중 오류 발생: {e}")
-
 
 
     def handle_script_receive(self):
@@ -330,116 +288,6 @@ class Main:
             return
 
 
-    # def handle_script_receive(self):
-    #     global tcp_receive_buffer, is_script_sending, script_bytes
-    #
-    #     # 1) 'Script send' 감지: 라인 단위로 처리
-    #     progressed = False
-    #     while True:
-    #         # 스크립트 수신 중이 아닐 때는 'Script send' 라인을 기다림
-    #         if not is_script_sending:
-    #             line = _pop_line_from_buffer()
-    #             if line is None:
-    #                 break
-    #             progressed = True
-    #             if "Script send" in line:
-    #                 is_script_sending = True
-    #                 script_bytes = bytearray()
-    #                 # 서버가 ACK을 요구한다면 아래 문자열을 서버 요구값으로 바꿔 주세요.
-    #                 # W5500.sendMessage("Script ready\n")
-    #                 print("[DEBUG] Script receive start")
-    #             else:
-    #                 # 스크립트 관련이 아닌 라인은 그대로 버퍼에 되돌려 두고 종료
-    #                 # (barcode_info 등 다른 파서가 처리하도록)
-    #                 tcp_receive_buffer = line + "\n" + tcp_receive_buffer
-    #                 break
-    #         else:
-    #             # 2) 스크립트 수신 중이면 다음 라인을 처리
-    #             line = _pop_line_from_buffer()
-    #             if line is None:
-    #                 break
-    #             progressed = True
-    #             s = line.strip()
-    #
-    #             if not s:
-    #                 continue
-    #
-    #             if s == "EOF":
-    #                 # 완료
-    #                 print("[Debug] Script 수신 완료 - 파일 저장")
-    #                 self.save_to_script_file_bytes(bytes(script_bytes))
-    #                 is_script_sending = False
-    #                 script_bytes = bytearray()
-    #
-    #                 # 이후 MCU 전송 루틴
-    #                 start_time = time.ticks_ms()
-    #                 for i in range(8):
-    #                     ret = self.sendScript(i + 1)
-    #                     msg = f"Script save {ret}: MCU{i + 1}\n"
-    #                     W5500.sendMessage(msg)
-    #                 end_time = time.ticks_ms()
-    #                 print(f'Elapsed time: {time.ticks_diff(end_time, start_time) / 1000}ms')
-    #                 break
-    #
-    #             # SCRIPT_CHUNK <len> <b64>
-    #             if s.startswith("SCRIPT_CHUNK "):
-    #                 parts = s.split(" ", 2)
-    #                 if len(parts) < 3:
-    #                     print("[Warn] malformed SCRIPT_CHUNK line:", s[:80])
-    #                     continue
-    #                 _, raw_len_str, b64_payload = parts
-    #                 try:
-    #                     raw_len = int(raw_len_str)
-    #                 except:
-    #                     print("[Warn] invalid length in SCRIPT_CHUNK:", raw_len_str)
-    #                     raw_len = -1
-    #
-    #                 decoded = _b64decode(b64_payload)
-    #                 if raw_len >= 0 and len(decoded) != raw_len:
-    #                     print(f"[Warn] length mismatch: expected {raw_len}, got {len(decoded)}")
-    #
-    #                 script_bytes.extend(decoded)
-    #             else:
-    #                 # 스크립트 수신 중 예기치 않은 라인 -> 다른 파서에 넘기기 위해 되돌려 놓음
-    #                 tcp_receive_buffer = s + "\n" + tcp_receive_buffer
-    #                 # 스크립트 라인이 아니므로 일단 루프 종료
-    #                 break
-    #
-    #     # 진행된 게 없으면 반환
-    #     if not progressed:
-    #         return
-
-
-
-    # def handle_script_receive(self):
-    #     global tcp_receive_buffer, is_script_sending, mcu_script_status
-    #
-    #     # Script send 신호 감지 및 스크립트 수신 시작
-    #     if not is_script_sending and "Script send" in tcp_receive_buffer:
-    #         idx = tcp_receive_buffer.index("Script send")
-    #         tcp_receive_buffer = tcp_receive_buffer[idx + len("Script send"):]
-    #         is_script_sending = True
-    #         return
-    #
-    #     # 스크립트 수신 종료(EOF) 감지 및 저장
-    #     if is_script_sending and "EOF" in tcp_receive_buffer:
-    #         idx = tcp_receive_buffer.index("EOF")
-    #         script_buffer = tcp_receive_buffer[:idx]
-    #         tcp_receive_buffer = tcp_receive_buffer[idx + len("EOF"):]
-    #         print("[Debug] Script 수신 완료 - 파일로 저장")
-    #         self.save_to_script_file(script_buffer)
-    #         is_script_sending = False
-    #
-    #         start_time = time.ticks_ms()
-    #         for i in range(8):
-    #             ret = self.sendScript(i + 1)
-    #             msg = f"Script save {ret}: MCU{i + 1}\n"
-    #             W5500.sendMessage(msg)
-    #         end_time = time.ticks_ms()
-    #         print(f'Elapsed time: {time.ticks_diff(end_time, start_time) / 1000}ms')
-    #     else:
-    #         # EOF가 없으면 버퍼를 비우지 않고 계속 누적만 함
-    #         return
 
     def handle_barcode_receive(self):
         """
