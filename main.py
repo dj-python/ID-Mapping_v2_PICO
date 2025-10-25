@@ -15,14 +15,16 @@ SPI_BUF_SIZE = 32
 DELAY_SPI_TX_RX = 0.000_01
 SPI_TX_RETRY = 0
 
-DEBUG_MODE = False
+DEBUG_MODE = True
+# DEBUG_MODE = False
+
 
 class Error:
-    ERR_CURRENT     = 'ERR_CURRENT'
-    ERR_SPI         = 'ERR_COM'
-    ERR_SENSOR_ID   = 'ERR_SENSOR_ID'
-    ERR_VARIFY      = 'ERR_VARIFY'
-
+    COM_SPI         = 'ERR_COM_SPI'
+    COM_I2C         = 'ERR_COM_I2C'
+    CURRENT_LIMIT   = 'ERR_CURRENT_LIMIT'
+    READ_SENSOR_ID  = 'ERR_READ_SENSOR_ID'
+    # VARIFY          = 'VARIFY'
 
 
 # ===== 추가: 베이스64 디코더 및 라인 파서 유틸 =====
@@ -113,14 +115,20 @@ class Main:
         elif self.gpioIn_ipSel1.value() == 0 and self.gpioIn_ipSel2.value() == 1 and self.gpioIn_ipSel3.value() == 1:
             self.ipAddress = '192.168.1.104'
             self.portNumber = 8004
-        # endregion
 
         self.try_init_tcp()
+        # endregion
 
+        # start_time = time.ticks_ms()
+        # for i in range(8):
+        #     self.sendScript(i+1)
+        # end_time = time.ticks_ms()
+        # print(f'Script update elapsed time[ms]: {time.ticks_diff(end_time, start_time) / 1000}')
 
         # self.sendScript(5)
         # barcode = 'C9051A569000H5'
         # self.sendBarcode(5, barcode)
+        # endregion
 
     # region time function
     def func_1ms(self):
@@ -159,8 +167,6 @@ class Main:
     def func_50ms(self):
         pass
 
-
-
     def func_100ms(self):
         if self.isRead_sensorId:
             self.sensorId = dict()
@@ -186,7 +192,12 @@ class Main:
         self.sysLed_pico(not self.sysLed_pico.value())
     # endregion
 
-    # region About UDP/IP
+    def func_1000ms(self):
+        # W5500.sendMessage("ping\n")
+        pass
+
+    # region About UDP
+
     def try_init_tcp(self):
         # 함수명은 기존 유지 (호출부 변경 최소화). 내부는 UDP 모듈 사용.
         try:
@@ -200,13 +211,14 @@ class Main:
 
     @staticmethod
     def save_to_script_file_bytes(data: bytes):
+        print(f'received data: {data}')
+
         try:
             with open("script.txt", "wb") as f:
                 f.write(data)
             print("[Debug] script.txt 저장 완료 ({} bytes)".format(len(data)))
         except Exception as e:
             print(f"[Error] script.txt 저장 오류: {e}")
-
 
     def handle_script_receive(self):
         global tcp_receive_buffer, is_script_sending, script_bytes
@@ -248,7 +260,7 @@ class Main:
                 print("[Debug] Script 수신 완료 - 파일 저장")
                 self.save_to_script_file_bytes(bytes(script_bytes))
                 is_script_sending = False
-                script_bytes = bytearray()
+                # script_bytes = bytearray()
 
                 # 이후 MCU로 스크립트 전송
                 start_time = time.ticks_ms()
@@ -257,11 +269,14 @@ class Main:
                     msg = f"Script save {ret}: MCU{i + 1}\n"
                     W5500.sendMessage(msg)
                 end_time = time.ticks_ms()
-                print(f'Elapsed time: {time.ticks_diff(end_time, start_time) / 1000}ms')
+                print(f'Script update elapsed time[ms]: {time.ticks_diff(end_time, start_time) / 1000}')
                 break
 
+
+
             # 청크 라인: SCRIPT_CHUNK <len> <b64>
-            if s.startswith("SCRIPT_CHUNK "):
+            if s:
+            # if s.startswith("SCRIPT_CHUNK "):
                 parts = s.split(" ", 2)
                 if len(parts) < 3:
                     print("[Warn] malformed SCRIPT_CHUNK line:", s[:80])
@@ -286,8 +301,6 @@ class Main:
 
         if not progressed:
             return
-
-
 
     def handle_barcode_receive(self):
         """
@@ -427,7 +440,7 @@ class Main:
                             fail_cnt += 1
                             if fail_cnt > SPI_TX_RETRY:
                                 print(f'Error: Failed update script')
-                                return 'failed'
+                                return Error.COM_SPI
                             else:
                                 print(f'Warning: Failed checksum, TX Retry{fail_cnt}')
         return 'finished'
@@ -454,12 +467,12 @@ class Main:
                 fail_cnt += 1
                 if fail_cnt > SPI_TX_RETRY:
                     print(f'MCU_{target} >> Error: Failed send barcode')
-                    return 'failed'
+                    return Error.COM_SPI
                 else:
                     print(f'MCU_{target} >> Warning: Failed checksum, TX Retry{fail_cnt}')
         return 'finished'
 
-    def readSensorId(self, target) -> any:
+    def readSensorId(self, target) -> str:
         sendBytes = b'\x03\x00\x00\x00'
 
         while len(sendBytes) < (SPI_BUF_SIZE - 2):
@@ -475,24 +488,27 @@ class Main:
 
             rxVal = self.receiveDataBySpi(SPI_BUF_SIZE, target)
 
-            if (self.getChecksum(rxVal[:-2]) == int.from_bytes(rxVal[SPI_BUF_SIZE - 2:], 'big') and
-                    rxVal[1] == 0x00):
-                sensorId_len = int.from_bytes(rxVal[2:4])
-                sensorId = rxVal[4:4+sensorId_len]
-                # print(f'Read sensor ID: {sensorId}')
-                break
+            if self.getChecksum(rxVal[:-2]) == int.from_bytes(rxVal[SPI_BUF_SIZE - 2:], 'big'):
+                if rxVal[1] == 0x00:
+                    sensorId_len = int.from_bytes(rxVal[2:4])
+                    sensorId = rxVal[4:4+sensorId_len]
+
+                    # print(f'Read sensor ID: {sensorId}')
+                    if int.from_bytes(sensorId, 'big') == 0:
+                        return Error.READ_SENSOR_ID
+                    else:
+                        return sensorId.hex().upper()
+                elif rxVal[1] == 0x10:
+                    return Error.CURRENT_LIMIT
+                elif rxVal[1] == 0x11:
+                    return Error.COM_I2C
             else:
                 fail_cnt += 1
                 if fail_cnt > SPI_TX_RETRY:
                     print(f'MCU_{target} >> Error: Failed read sensor ID')
-                    return 'failed'
+                    return Error.COM_SPI
                 else:
                     print(f'MCU_{target} >> Warning: Failed checksum, TX Retry{fail_cnt}')
-
-        if int.from_bytes(sensorId, 'big') == 0:
-            return '0'
-        else:
-            return sensorId.hex().upper()
 
     def spi_chip_select(self, target, high_low):
         if target == 1:
@@ -558,6 +574,7 @@ class Main:
         return result
 
 
+
 if __name__ == "__main__":
     cnt_ms = 0
 
@@ -590,6 +607,9 @@ if __name__ == "__main__":
 
             if not cnt_ms % 500:
                 main.func_500ms()
+
+            if not cnt_ms % 1000:
+                main.func_1000ms()
 
             time.sleep_ms(1)
         except KeyboardInterrupt:
