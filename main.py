@@ -15,7 +15,7 @@ SPI_BUF_SIZE = 32
 DELAY_SPI_TX_RX = 0.000_01
 SPI_TX_RETRY = 0
 
-DEBUG_MODE = True
+DEBUG_MODE = False
 # DEBUG_MODE = False
 
 
@@ -211,7 +211,7 @@ class Main:
 
     @staticmethod
     def save_to_script_file_bytes(data: bytes):
-        print(f'received data: {data}')
+        # print(f'received data: {data}')
 
         try:
             with open("script.txt", "wb") as f:
@@ -220,49 +220,59 @@ class Main:
         except Exception as e:
             print(f"[Error] script.txt 저장 오류: {e}")
 
+
+
     def handle_script_receive(self):
+        """
+        서버 전송 포맷(UDP):
+        - 'Script send' (단일 패킷, 개행 없음 가능)
+        - 이후 스크립트 본문을 원문 그대로 여러 패킷으로 전송(256 bytes)
+        - 마지막에 'EOF' (단일 패킷, 개행 없음 가능)
+        본 함수는 위 토큰을 스트림 내 서브스트링으로 탐지하여 수신/저장한다.
+        """
         global tcp_receive_buffer, is_script_sending, script_bytes
 
         progressed = False
-        while True:
-            # 1) 스크립트 수신 전: 'Script send' 라인이 나올 때까지 잡음 라인 소비
-            if not is_script_sending:
-                line = _pop_line_from_buffer()
-                if line is None:
-                    break
-                progressed = True
 
-                # 'Script send' 포함 라인 만나면 수신 모드로 전환
-                if "Script send" in line:
-                    is_script_sending = True
-                    script_bytes = bytearray()
-                    print("[DEBUG] Script receive start")
-                    # 서버가 ACK을 요구한다면 아래 한 줄을 서버 요구 문자열로 변경 후 주석 해제
-                    # W5500.sendMessage("Script ready\n")
-                    continue
-
-                # 여기로 오면 UDPTest 같은 잡음 라인
-                # 이전 코드처럼 버퍼에 되돌려놓지 말고 '소비'하고 계속 진행
-                continue
-
-            # 2) 스크립트 수신 중: 다음 라인을 처리
-            line = _pop_line_from_buffer()
-            if line is None:
-                break
+        # 1) 시작 신호 감지
+        if not is_script_sending and "Script send" in tcp_receive_buffer:
+            is_script_sending = True
+            script_bytes = bytearray()
             progressed = True
+            start_idx = tcp_receive_buffer.find("Script send")
+            end_idx = start_idx + len("Script send")
+            # 'Script send' 토큰 소비(+선택적 CR/LF 제거)
+            while end_idx < len(tcp_receive_buffer) and tcp_receive_buffer[end_idx] in ("\r", "\n"):
+                end_idx += 1
+            tcp_receive_buffer = tcp_receive_buffer[end_idx:]
+            print("[DEBUG] Script receive start")
 
-            s = line.strip()
-            if not s:
-                continue
+        # 2) 수신 중 본문 누적 및 종료 처리
+        if is_script_sending and tcp_receive_buffer:
+            progressed = True
+            eof_idx = tcp_receive_buffer.find("EOF")
 
-            # 종료 토큰
-            if s == "EOF":
+            if eof_idx != -1:
+                # EOF 이전까지의 데이터를 누적
+                if eof_idx > 0:
+                    data_part = tcp_receive_buffer[:eof_idx]
+                    try:
+                        script_bytes.extend(data_part.encode('utf-8'))
+                    except Exception:
+                        # 인코딩 이슈 시 최대한 바이트 보존
+                        script_bytes.extend(data_part.encode('latin-1', 'ignore'))
+
+                # EOF 토큰 소비(+선택적 CR/LF 제거)
+                end_idx = eof_idx + len("EOF")
+                while end_idx < len(tcp_receive_buffer) and tcp_receive_buffer[end_idx] in ("\r", "\n"):
+                    end_idx += 1
+                tcp_receive_buffer = tcp_receive_buffer[end_idx:]
+
+                # 파일 저장 및 MCU 전송
                 print("[Debug] Script 수신 완료 - 파일 저장")
                 self.save_to_script_file_bytes(bytes(script_bytes))
                 is_script_sending = False
-                # script_bytes = bytearray()
 
-                # 이후 MCU로 스크립트 전송
                 start_time = time.ticks_ms()
                 for i in range(8):
                     ret = self.sendScript(i + 1)
@@ -270,37 +280,100 @@ class Main:
                     W5500.sendMessage(msg)
                 end_time = time.ticks_ms()
                 print(f'Script update elapsed time[ms]: {time.ticks_diff(end_time, start_time) / 1000}')
-                break
-
-
-
-            # 청크 라인: SCRIPT_CHUNK <len> <b64>
-            if s:
-            # if s.startswith("SCRIPT_CHUNK "):
-                parts = s.split(" ", 2)
-                if len(parts) < 3:
-                    print("[Warn] malformed SCRIPT_CHUNK line:", s[:80])
-                    continue
-                _, raw_len_str, b64_payload = parts
+            else:
+                # 아직 EOF가 없으면 모두 누적하고 버퍼 비움
                 try:
-                    expected_len = int(raw_len_str)
-                except:
-                    print("[Warn] invalid length in SCRIPT_CHUNK:", raw_len_str)
-                    expected_len = -1
-
-                decoded = _b64decode(b64_payload)
-                if expected_len >= 0 and len(decoded) != expected_len:
-                    print(f"[Warn] length mismatch: expected {expected_len}, got {len(decoded)}")
-
-                script_bytes.extend(decoded)
-                continue
-
-            # 스크립트 수신 중 예기치 않은 라인: 되돌리지 말고 무시
-            # (되돌리면 다시 이 지점에서 막힐 수 있음)
-            continue
+                    script_bytes.extend(tcp_receive_buffer.encode('utf-8'))
+                except Exception:
+                    script_bytes.extend(tcp_receive_buffer.encode('latin-1', 'ignore'))
+                tcp_receive_buffer = ""
 
         if not progressed:
             return
+
+
+
+    # def handle_script_receive(self):
+    #     global tcp_receive_buffer, is_script_sending, script_bytes
+    #
+    #     progressed = False
+    #     while True:
+    #         # 1) 스크립트 수신 전: 'Script send' 라인이 나올 때까지 잡음 라인 소비
+    #         if not is_script_sending:
+    #             line = _pop_line_from_buffer()
+    #             if line is None:
+    #                 break
+    #             progressed = True
+    #
+    #             # 'Script send' 포함 라인 만나면 수신 모드로 전환
+    #             if "Script send" in line:
+    #                 is_script_sending = True
+    #                 script_bytes = bytearray()
+    #                 print("[DEBUG] Script receive start")
+    #                 # 서버가 ACK을 요구한다면 아래 한 줄을 서버 요구 문자열로 변경 후 주석 해제
+    #                 # W5500.sendMessage("Script ready\n")
+    #                 continue
+    #
+    #             # 여기로 오면 UDPTest 같은 잡음 라인
+    #             # 이전 코드처럼 버퍼에 되돌려놓지 말고 '소비'하고 계속 진행
+    #             continue
+    #
+    #         # 2) 스크립트 수신 중: 다음 라인을 처리
+    #         line = _pop_line_from_buffer()
+    #         if line is None:
+    #             break
+    #         progressed = True
+    #
+    #         s = line.strip()
+    #         if not s:
+    #             continue
+    #
+    #         # 종료 토큰
+    #         if s == "EOF":
+    #             print("[Debug] Script 수신 완료 - 파일 저장")
+    #             self.save_to_script_file_bytes(bytes(script_bytes))
+    #             is_script_sending = False
+    #             # script_bytes = bytearray()
+    #
+    #             # 이후 MCU로 스크립트 전송
+    #             start_time = time.ticks_ms()
+    #             for i in range(8):
+    #                 ret = self.sendScript(i + 1)
+    #                 msg = f"Script save {ret}: MCU{i + 1}\n"
+    #                 W5500.sendMessage(msg)
+    #             end_time = time.ticks_ms()
+    #             print(f'Script update elapsed time[ms]: {time.ticks_diff(end_time, start_time) / 1000}')
+    #             break
+    #
+    #
+    #
+    #         # 청크 라인: SCRIPT_CHUNK <len> <b64>
+    #         if s:
+    #         # if s.startswith("SCRIPT_CHUNK "):
+    #             parts = s.split(" ", 2)
+    #             if len(parts) < 3:
+    #                 print("[Warn] malformed SCRIPT_CHUNK line:", s[:80])
+    #                 continue
+    #             _, raw_len_str, b64_payload = parts
+    #             try:
+    #                 expected_len = int(raw_len_str)
+    #             except:
+    #                 print("[Warn] invalid length in SCRIPT_CHUNK:", raw_len_str)
+    #                 expected_len = -1
+    #
+    #             decoded = _b64decode(b64_payload)
+    #             if expected_len >= 0 and len(decoded) != expected_len:
+    #                 print(f"[Warn] length mismatch: expected {expected_len}, got {len(decoded)}")
+    #
+    #             script_bytes.extend(decoded)
+    #             continue
+    #
+    #         # 스크립트 수신 중 예기치 않은 라인: 되돌리지 말고 무시
+    #         # (되돌리면 다시 이 지점에서 막힐 수 있음)
+    #         continue
+    #
+    #     if not progressed:
+    #         return
 
     def handle_barcode_receive(self):
         """
